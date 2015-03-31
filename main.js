@@ -26,3 +26,18 @@ Parse.Cloud.define("requestCode", function(request, response) {
     response.success();
   });
 });
+
+Parse.Cloud.define("checkUsersFromContacts", function(request, response) {
+  var phonesArray = request.params.phonesArray;
+  var query = new Parse.Query(Parse.User);
+  query.containedIn("phoneNumber", phonesArray);
+  query.equalTo("isRegistered", true);
+  query.find({
+    success: function (usersArray) {
+      response.success(usersArray)
+    },
+    error: function (usersArray, error) {
+      response.error(err.message);
+    }
+  });
+});
