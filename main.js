@@ -36,7 +36,7 @@ Parse.Cloud.define("checkUsersFromContacts", function(request, response) {
     success: function (usersArray) {
       response.success(usersArray)
     },
-    error: function (usersArray, error) {
+    error: function (error) {
       response.error(err.message);
     }
   });
@@ -85,34 +85,39 @@ Parse.Cloud.beforeDelete("FollowAction", function(request, response) {
 Parse.Cloud.afterSave("FollowAction", function(request) {
   var fromUser = request.object.get("from");
   var toUser = request.object.get("to");
-  updateUserCount(fromUser, "from", "followingCount");
-  updateUserCount(toUser, "to", "followerCount");
+  updateUserList(fromUser, "from", "to", "following");
+  updateUserList(toUser, "to", "from", "followers");
 });
 
 Parse.Cloud.afterDelete("FollowAction", function(request) {
   var fromUser = request.object.get("from");
   var toUser = request.object.get("to");
-  updateUserCount(fromUser, "from", "followingCount");
-  updateUserCount(toUser, "to", "followerCount");
+  updateUserList(fromUser, "from", "to", "following");
+  updateUserList(toUser, "to", "from", "followers");
 });
 
-var updateUserCount = function(user, userKey, countKey) {
-  var followersQuery = new Parse.Query("FollowAction");
-  followersQuery.equalTo(userKey, user);
-  followersQuery.find({
+var updateUserList = function(user, userKey, userListKey, listKey) {
+  var actionQuery = new Parse.Query("FollowAction");
+  actionQuery.equalTo(userKey, user);
+  actionQuery.include(userListKey);
+  actionQuery.find({
     success: function (results) {
-      user.set(countKey, results.length);
+      var userIdList = [];
+      for (var i = 0; i < results.length; i++) {
+        userIdList[i] = results[i].get(userListKey).id;
+      };
+      user.set(listKey, userIdList);
       user.save(null, {
         useMasterKey: true,
         success: function() {
           console.log("User save ok");
         },
-        error: function(cs, error) {
+        error: function(error) {
           console.log("User save error: "+error.code+" "+error.message);
         }
       });
     },
-    error: function (results, error) {
+    error: function (error) {
       console.log(error.message);
     }
   });
