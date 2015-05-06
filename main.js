@@ -42,83 +42,67 @@ Parse.Cloud.define("checkUsersFromContacts", function(request, response) {
   });
 });
 
-Parse.Cloud.beforeSave("FollowAction", function(request, response) {
-  var fromUser = request.object.get("from");
-  var toUser = request.object.get("to");
+Parse.Cloud.define("follow", function(request, response) {
   var sender = request.user;
-  if (fromUser.id === toUser.id) {
+  var followingId = request.params.followingId;
+  var isFollow = request.params.isFollow;
+  if (sender.id === followingId) {
     response.error(JSON.stringify({code: 105, message: "You cannot follow yourself!"}));
   }
-  if (fromUser.id === sender.id) {
-    var actionQuery = new Parse.Query("FollowAction");
-    actionQuery.equalTo("from", fromUser);
-    actionQuery.equalTo("to", toUser);
-    actionQuery.first({
-      success: function(action) {
-        if(action) {
-          response.error(JSON.stringify({code: 108, message: "You alredy follows this user"}));
-        } else {
-          response.success();
-        }
-      },
-      error: function(error) {
-        console.log("error: "+error.code+" "+error.message);
-        response.error(JSON.stringify({code: 107, message: "Action search error", error: error}));
-      }
-    });
-  } else {
-    response.error(JSON.stringify({code: 106, message: "You doesn't have permissions for that action!"}));
-  }
-});
+  var fetchQuery = new Parse.Query(Parse.User);
+  fetchQuery.get(followingId, {
+    success: function(following) {
+      var query = new Parse.Query(Parse.User);
+      query.equalTo("following", following);
+      query.equalTo("id", sender.id);
 
-Parse.Cloud.beforeDelete("FollowAction", function(request, response) {
-  var fromUser = request.object.get("from");
-  var toUser = request.object.get("to");
-  var sender = request.user;
-  if (fromUser.id === sender.id) {
-    response.success();
-  } else {
-    response.error(JSON.stringify({code: 106, message: "You doesn't have permissions for that action!"}));
-  }
-});
+      query.first({
+        success: function(user) {
+          if(user) {
+            response.error(JSON.stringify({code: 108, message: "You alredy follows this user"}));
+          } else {
+            if (isFollow) {
+              sender.addUnique("following", following.id);
+              following.addUnique("followers", sender.id);
+            } else {
+              sender.remove("following", following.id);
+              following.remove("followers", sender.id);
+            };
 
-Parse.Cloud.afterSave("FollowAction", function(request) {
-  var fromUser = request.object.get("from");
-  var toUser = request.object.get("to");
-  updateUserList(fromUser, "from", "to", "following");
-  updateUserList(toUser, "to", "from", "followers");
-});
+            sender.save(null, {
+              useMasterKey: true,
+              success: function() {
+                console.log("Sender save ok");
 
-Parse.Cloud.afterDelete("FollowAction", function(request) {
-  var fromUser = request.object.get("from");
-  var toUser = request.object.get("to");
-  updateUserList(fromUser, "from", "to", "following");
-  updateUserList(toUser, "to", "from", "followers");
-});
+                following.save(null, {
+                  useMasterKey: true,
+                  success: function() {
+                    console.log("Following save ok");
+                    response.success(sender);
+                  },
+                  error: function(object, error) {
+                    console.log("Following save error: "+error.code+" "+error.message);
+                    response.error(JSON.stringify({code: 106, message: "User save error"}));
+                  }
 
-var updateUserList = function(user, userKey, userListKey, listKey) {
-  var actionQuery = new Parse.Query("FollowAction");
-  actionQuery.equalTo(userKey, user);
-  actionQuery.include(userListKey);
-  actionQuery.find({
-    success: function (results) {
-      var userIdList = [];
-      for (var i = 0; i < results.length; i++) {
-        userIdList[i] = results[i].get(userListKey).id;
-      };
-      user.set(listKey, userIdList);
-      user.save(null, {
-        useMasterKey: true,
-        success: function() {
-          console.log("User save ok");
+                });
+              },
+              error: function(object, error) {
+                console.log("Sender save error: "+error.code+" "+error.message);
+                response.error(JSON.stringify({code: 106, message: "User save error"}));
+              }
+            });
+          }
         },
-        error: function(error) {
-          console.log("User save error: "+error.code+" "+error.message);
+        error: function(object, error) {
+          console.log("error: "+error.code+" "+error.message);
+          response.error(JSON.stringify({code: 107, message: "Action search error", error: error}));
         }
       });
     },
-    error: function (error) {
-      console.log(error.message);
-    }
+    error: function(object, error) {
+          console.log("error: "+error.code+" "+error.message);
+          response.error(JSON.stringify({code: 109, message: "Action search error", error: error}));
+    } 
   });
-};
+});
