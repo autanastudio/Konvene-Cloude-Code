@@ -106,3 +106,31 @@ Parse.Cloud.define("follow", function(request, response) {
     } 
   });
 });
+
+Parse.Cloud.afterSave("Event", function(request) {
+  var owner = request.object.get("owner");
+  owner.addUnique("createdEvents", request.object.id);
+  owner.save(null, {
+    useMasterKey: true,
+    success: function() {
+      console.log("Create event ok");
+    },
+    error: function(object, error) {
+      console.log("Create event error: "+error.code+" "+error.message);
+    }
+  });
+});
+
+Parse.Cloud.afterDelete("Event", function(request) {
+  var owner = request.object.get("owner");
+  owner.remove("createdEvents", request.object.id);
+  owner.save(null, {
+    useMasterKey: true,
+    success: function() {
+      console.log("Remove event ok");
+    },
+    error: function(object, error) {
+      console.log("Remove event error: "+error.code+" "+error.message);
+    }
+  });
+});
