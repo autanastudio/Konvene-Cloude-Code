@@ -1,3 +1,5 @@
+var Invite = Parse.Object.extend("Invite");
+
 Parse.Cloud.define("authorize", function(request, response) {
   var klauth = require('cloud/klauth.js');
   var phoneNumber = request.params.phoneNumber;
@@ -96,29 +98,145 @@ Parse.Cloud.define("follow", function(request, response) {
         },
         error: function(object, error) {
           console.log("error: "+error.code+" "+error.message);
-          response.error(JSON.stringify({code: 107, message: "Action search error", error: error}));
+          response.error(JSON.stringify({code: 107, message: "Follow search error", error: error}));
         }
       });
     },
     error: function(object, error) {
           console.log("error: "+error.code+" "+error.message);
-          response.error(JSON.stringify({code: 109, message: "Action search error", error: error}));
+          response.error(JSON.stringify({code: 109, message: "Fetch user error", error: error}));
     } 
   });
 });
 
-Parse.Cloud.afterSave("Event", function(request) {
-  var owner = request.object.get("owner");
-  owner.addUnique("createdEvents", request.object.id);
-  owner.save(null, {
-    useMasterKey: true,
-    success: function() {
-      console.log("Create event ok");
+Parse.Cloud.define("invite", function(request, response) {
+  var sender = request.user;
+  var invitedId = request.params.invitedId;
+  var eventId = request.params.eventId;
+  if (sender.id === invitedId) {
+    response.error(JSON.stringify({code: 105, message: "You cannot invite yourself!"}));
+  }
+  var fetchQuery = new Parse.Query(Parse.Object.extend("Event"));
+  fetchQuery.get(eventId, {
+    success: function(eventObject) {
+      var privacyType = eventObject.get("privacy");
+      if (privacyType === 1) {
+        if (indexOf.call(eventObject.get("invited", sender.id))) {
+          response.error(JSON.stringify({code: 110, message: "You doesnt have permissions for this operation!"}));
+        };
+      } else if (privacyType === 2) {
+        var owner = eventObject.get("owner");
+        if (owner.id !== sender.id) {
+          response.error(JSON.stringify({code: 110, message: "You doesnt have permissions for this operation!"}));
+        };
+      };
+      eventObject.addUnique("invited", invitedId);
+      eventObject.save(null, {
+        useMasterKey: true,
+        success: function() {
+          console.log("Event save ok");
+          inviteUser(eventObject, sender, invitedId, response);
+        },
+        error: function(object, error) {
+          console.log("Event save error: "+error.code+" "+error.message);
+          response.error(JSON.stringify({code: 106, message: "Event save error"}));
+        }
+      });
     },
     error: function(object, error) {
-      console.log("Create event error: "+error.code+" "+error.message);
-    }
+          console.log("error: "+error.code+" "+error.message);
+          response.error(JSON.stringify({code: 109, message: "Event fetch error", error: error}));
+    } 
   });
+});
+
+Parse.Cloud.define("attend", function(request, response) {
+  var sender = request.user;
+  var eventId = request.params.eventId;
+  var fetchQuery = new Parse.Query(Parse.Object.extend("Event"));
+  fetchQuery.get(eventId, {
+    success: function(eventObject) {
+      var privacyType = eventObject.get("privacy");
+      if (privacyType !== 0 && indexOf.call(eventObject.get('invited', sender.id)) === -1) {
+        response.error(JSON.stringify({code: 110, message: "You doesnt have permissions for this operation!"}));
+      } else {
+        var pricingType = eventObject.get('pricingType');
+        var minimumAmount = eventObject.get('minimumAmount');
+        if (pricingType===0 || (pricingType===2 && minimumAmount === 0)) {
+          eventObject.addUnique("attendees", sender.id);
+          eventObject.save(null, {
+            useMasterKey: true,
+            success: function() {
+              console.log("Event save ok");
+              response.success(eventObject);
+            },
+            error: function(object, error) {
+              console.log("Event save error: "+error.code+" "+error.message);
+              response.error(JSON.stringify({code: 106, message: "Event save error"}));
+            }
+          });
+        } else {
+          response.error(JSON.stringify({code: 111, message: "You should pay for this event!"}));
+        };
+      };
+    },
+    error: function(object, error) {
+          console.log("error: "+error.code+" "+error.message);
+          response.error(JSON.stringify({code: 109, message: "Event fetch error", error: error}));
+    } 
+  });
+});
+
+var inviteUser = function(event, from, toId, response) {
+    var query = new Parse.Query(Invite);
+    var to = new Parse.User();
+    to.id = toId;
+    query.equalTo('to', to);
+    query.equalTo('event', event);
+    query.first({
+      success: function(invite) {
+        if(invite) {
+          response.error(JSON.stringify({code: 108, message: "You alredy invite this user"}));
+        } else {
+          console.log("Invite not found, creating new one");
+          invite = new Invite();
+          invite.set('from', from);
+          invite.set('to', to);
+          invite.set('event', event);
+          invite.set('status', 0);
+          invite.save(null, {
+            useMasterKey: true,
+            success: function() {
+              console.log("Invite save ok");              response.success(event);              response.success(event);
+            },
+            error: function(object, error) {
+              console.log("Invite save error: "+error.code+" "+error.message);
+              response.error(JSON.stringify({code: 106, message: "Invite save error"}));
+            }
+      });
+        }
+      },
+      error: function(error) {
+        console.log("error: " + error.code + " " + error.message);
+         
+      }
+    });
+};
+
+Parse.Cloud.afterSave("Event", function(request) {
+  if (request.object.existed() == false) {
+    var owner = request.object.get("owner");
+    owner.addUnique("createdEvents", request.object.id);
+    owner.save(null, {
+      useMasterKey: true,
+      success: function() {
+        console.log("Create event ok");
+      },
+      error: function(object, error) {
+        console.log("Create event error: "+error.code+" "+error.message);
+      }
+    });
+  };
 });
 
 Parse.Cloud.afterDelete("Event", function(request) {
@@ -134,3 +252,21 @@ Parse.Cloud.afterDelete("Event", function(request) {
     }
   });
 });
+
+var indexOf = function(needle) {
+  if(typeof Array.prototype.indexOf === 'function') {
+    indexOf = Array.prototype.indexOf;
+  } else {
+    indexOf = function(needle) {
+      var i = -1, index = -1;
+      for(i = 0; i < this.length; i++) {
+        if(this[i] === needle) {
+          index = i;
+          break;
+        }
+      }
+      return index;
+    };
+  }
+  return indexOf.call(this, needle);
+};
