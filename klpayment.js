@@ -154,7 +154,7 @@
       Parse.Cloud.httpRequest({
         method:"POST",
         url: "https://" + stripeSecretKey + ':@' + strpeBaseURL + "/customers/" + paymentInfo.get("customerId"),
-        body: "source=" + card.id,
+        body: "source=" + card.get("cardId"),
         success: function(httpResponse) {
           callBack(null);
         },
@@ -167,29 +167,37 @@
     });
   }
 
-  function charge(user, card, amount, callBack) {
-    getPaymentInfo(user, function(paymentInfo){
-      //TODO change source
-      var querystring = require('querystring');
-      var body = querystring.stringify({'amount':amount ,'currency':'usd','customer':paymentInfo.customerId});
+  function charge(user, cardId, amount, callBack) {
+    getCard(cardId, function(card){
+      changeSource(user, card, function(errorMessage){
+        if (errorMessage) {
+          callBack(null, errorMessage);
+        } else {
+          getPaymentInfo(user, function(paymentInfo){
+            //TODO change source
+            var querystring = require('querystring');
+            var body = querystring.stringify({'amount':amount ,'currency':'usd','customer':paymentInfo.customerId});
 
-      Parse.Cloud.httpRequest({
-        method:"POST",
-        url: "https://" + stripeSecretKey + ':@' + strpeBaseURL + "/charges",
-        body: body,
-        success: function(httpResponse) {
-          var jsonResult = JSON.parse(httpResponse.text);
-          var newCahrge = new KonvenePayment();
-          newCahrge.set("chargeId", jsonResult.id);
-          newCahrge.set("owner", user);
-          newCahrge.set("card", card);
-          newCahrge.set("amount", amount);
-          callBack(newCahrge, null);
-        },
-        error: function(httpResponse) {
-          console.log('Request failed with response code ' + httpResponse.status);
-          var jsonResult = JSON.parse(httpResponse.text);
-          callBack(null, jsonResult.error.message);
+            Parse.Cloud.httpRequest({
+              method:"POST",
+              url: "https://" + stripeSecretKey + ':@' + strpeBaseURL + "/charges",
+              body: body,
+              success: function(httpResponse) {
+                var jsonResult = JSON.parse(httpResponse.text);
+                var newCahrge = new KonvenePayment();
+                newCahrge.set("chargeId", jsonResult.id);
+                newCahrge.set("owner", user);
+                newCahrge.set("card", card);
+                newCahrge.set("amount", amount);
+                callBack(newCahrge, null);
+              },
+              error: function(httpResponse) {
+                console.log('Request failed with response code ' + httpResponse.status);
+                var jsonResult = JSON.parse(httpResponse.text);
+                callBack(null, jsonResult.error.message);
+              }
+            });
+          });
         }
       });
     });

@@ -297,14 +297,14 @@ Parse.Cloud.define("charge", function(request, response)
 {
   var klpayment = require('cloud/klpayment.js');
   var owner = request.user;
-  var card = request.params.card;
+  var cardId = request.params.cardId;
   var amount = request.params.amount;
   var eventId = request.params.eventId;
   var fetchQuery = new Parse.Query(Parse.Object.extend("Event"));
   fetchQuery.includeKey("EventPrice");
   fetchQuery.get(eventId, {
     success: function(eventObject) {
-      klpayment.charge(user, card, amount, function(newCharge, errorMessage){
+      klpayment.charge(user, cardId, amount, function(newCharge, errorMessage){
         if (errorMessage) {
           response.error(JSON.stringify({code:111, message: errorMessage}));
         } else {
