@@ -60,7 +60,7 @@
     });
   
     return allDone;
-  };
+  }
  
   function getUserWithCode(phoneNumber, code, callBack) {
     var query = new Parse.Query(Parse.User);
@@ -87,7 +87,7 @@
         callBack(null, JSON.stringify({code: 104, message: "User not found", error: error}));
       }
     });
-  };
+  }
  
   var getCodeData = function(user, callBack) {
     var query = new Parse.Query(CodeStorage);
@@ -116,9 +116,7 @@
   var newUser = function(phoneNumber, callBack) {
     var user = new Parse.User();
     // Generate a random username and password.
-    var username = new Buffer(24);
-    var password = new Buffer(24);
-    _.times(24, function(i) {
+    var username = new Buffer(24); var password = new Buffer(24); _.times(24, function(i) {
       username.set(i, _.random(0, 255));
       password.set(i, _.random(0, 255));
     });

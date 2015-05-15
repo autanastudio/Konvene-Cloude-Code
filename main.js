@@ -1,5 +1,6 @@
 var Invite = Parse.Object.extend("Invite");
 
+
 Parse.Cloud.define("authorize", function(request, response) {
   var klauth = require('cloud/klauth.js');
   var phoneNumber = request.params.phoneNumber;
@@ -36,7 +37,7 @@ Parse.Cloud.define("checkUsersFromContacts", function(request, response) {
   query.equalTo("isRegistered", true);
   query.find({
     success: function (usersArray) {
-      response.success(usersArray)
+      response.success(usersArray);
     },
     error: function (error) {
       response.error(err.message);
@@ -69,7 +70,7 @@ Parse.Cloud.define("follow", function(request, response) {
             } else {
               sender.remove("following", following.id);
               following.remove("followers", sender.id);
-            };
+            }
 
             sender.save(null, {
               useMasterKey: true,
@@ -123,13 +124,13 @@ Parse.Cloud.define("invite", function(request, response) {
       if (privacyType === 1) {
         if (indexOf.call(eventObject.get("invited", sender.id))) {
           response.error(JSON.stringify({code: 110, message: "You doesnt have permissions for this operation!"}));
-        };
+        }
       } else if (privacyType === 2) {
         var owner = eventObject.get("owner");
         if (owner.id !== sender.id) {
           response.error(JSON.stringify({code: 110, message: "You doesnt have permissions for this operation!"}));
-        };
-      };
+        }
+      }
       eventObject.addUnique("invited", invitedId);
       eventObject.save(null, {
         useMasterKey: true,
@@ -177,8 +178,8 @@ Parse.Cloud.define("attend", function(request, response) {
           });
         } else {
           response.error(JSON.stringify({code: 111, message: "You should pay for this event!"}));
-        };
-      };
+        }
+      }
     },
     error: function(object, error) {
           console.log("error: "+error.code+" "+error.message);
@@ -224,7 +225,7 @@ var inviteUser = function(event, from, toId, response) {
 };
 
 Parse.Cloud.afterSave("Event", function(request) {
-  if (request.object.existed() == false) {
+  if (request.object.existed() === false) {
     var owner = request.object.get("owner");
     owner.addUnique("createdEvents", request.object.id);
     owner.save(null, {
@@ -236,7 +237,7 @@ Parse.Cloud.afterSave("Event", function(request) {
         console.log("Create event error: "+error.code+" "+error.message);
       }
     });
-  };
+  }
 });
 
 Parse.Cloud.afterDelete("Event", function(request) {
@@ -250,6 +251,84 @@ Parse.Cloud.afterDelete("Event", function(request) {
     error: function(object, error) {
       console.log("Remove event error: "+error.code+" "+error.message);
     }
+  });
+});
+
+Parse.Cloud.define("addCard", function(request, response) 
+{
+  var klpayment = require('cloud/klpayment.js');
+  var owner = request.user;
+  var source = request.params.token;
+  klpayment.addCard(owner, source, function(paymentInfo, errorMessage){
+    if (errorMessage) {
+      response.error(JSON.stringify({code:111, message: errorMessage}));
+    } else {
+      owner.set("paymentInfo", paymentInfo);
+      owner.save(null, {
+        useMasterKey: true,
+        success: function() {
+          console.log("Save payment info ok");
+          response.success(paymentInfo);
+        },
+        error: function(object, error) {
+          console.log("Save payment info error: "+error.code+" "+error.message);
+          response.error(JSON.stringify({code: 106, message: "PaymentInfo save error"}));
+        }
+      });
+    }
+  });
+});
+
+Parse.Cloud.define("deleteCard", function(request, response) 
+{
+  var klpayment = require('cloud/klpayment.js');
+  var owner = request.user;
+  var cardId = request.params.cardId;
+  klpayment.removeCard(owner, cardId, function(errorMessage){
+    if (errorMessage) {
+      response.error(JSON.stringify({code:111, message: errorMessage}));
+    } else {
+      response.success();
+    }
+  });
+});
+
+Parse.Cloud.define("charge", function(request, response) 
+{
+  var klpayment = require('cloud/klpayment.js');
+  var owner = request.user;
+  var card = request.params.card;
+  var amount = request.params.amount;
+  var eventId = request.params.eventId;
+  var fetchQuery = new Parse.Query(Parse.Object.extend("Event"));
+  fetchQuery.includeKey("EventPrice");
+  fetchQuery.get(eventId, {
+    success: function(eventObject) {
+      klpayment.charge(user, card, amount, function(newCharge, errorMessage){
+        if (errorMessage) {
+          response.error(JSON.stringify({code:111, message: errorMessage}));
+        } else {
+          newCharge.set('event', eventObject);
+          var price = eventObject.get('price');
+          price.addUnique(newCharge);
+          price.save(null, {
+            useMasterKey: true,
+            success: function() {
+              console.log("Save payment info ok");
+              response.success();
+            },
+            error: function(object, error) {
+              console.log("Save payment info error: "+error.code+" "+error.message);
+              response.error(JSON.stringify({code: 106, message: "PaymentInfo save error"}));
+            }
+          });
+        }
+      });
+    },
+    error: function(object, error) {
+          console.log("error: "+error.code+" "+error.message);
+          response.error(JSON.stringify({code: 109, message: "Event fetch error", error: error}));
+    } 
   });
 });
 
