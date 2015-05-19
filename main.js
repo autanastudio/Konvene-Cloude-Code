@@ -1,8 +1,6 @@
 var Invite = Parse.Object.extend("Invite");
 var EventExtension = Parse.Object.extend("EventExtension");
 
-
-
 Parse.Cloud.define("authorize", function(request, response) {
   var klauth = require('cloud/klauth.js');
   var phoneNumber = request.params.phoneNumber;
@@ -128,24 +126,28 @@ Parse.Cloud.define("vote", function(request, response) {
         response.error(JSON.stringify({code: 108, message: "You alredy vote for event!"}));
       } else {
         var weight = [-2, -1, 0, 1, 2];
+        if (!extension) {
+          extension = new EventExtension();
+          eventObject.set("extension", extension);
+        }
         extension.addUnique("voters", sender.id);
         var raiting = extension.get("raiting") + weight[value];
         extension.set("raiting", raiting);
-        extension.save(null, {
+        eventObject.save(null, {
           useMasterKey: true,
           success: function() {
-            console.log("EventExtension save ok");
+            console.log("Event save ok");
             raiting = owner.get("raiting") + weight[value];
             owner.set("raiting", raiting);
             owner.save(null, {
               useMasterKey: true,
               success: function() {
-                console.log("Save vote ok");
+                console.log("Save event ok");
                 response.success(eventObject);
               },
               error: function(object, error) {
-                console.log("Save vote error: "+error.code+" "+error.message);
-                response.error(JSON.stringify({code: 106, message: "vote save error"}));
+                console.log("Save event error: "+error.code+" "+error.message);
+                response.error(JSON.stringify({code: 106, message: "Event save error"}));
               }
             });
           },
