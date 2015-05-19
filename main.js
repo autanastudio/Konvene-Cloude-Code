@@ -124,7 +124,7 @@ Parse.Cloud.define("vote", function(request, response) {
       var extension = eventObject.get("extension");
       if (owner.id === sender.id) {
         response.error(JSON.stringify({code: 110, message: "You cant vote for your event!"}));
-      } else if (indexOf.call(extension.get("voters"), sender.id) !== -1) {
+      } else if (extension &&  indexOf.call(extension.get("voters"), sender.id) !== -1) {
         response.error(JSON.stringify({code: 108, message: "You alredy vote for event!"}));
       } else {
         var weight = [-2, -1, 0, 1, 2];
