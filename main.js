@@ -1,4 +1,6 @@
 var Invite = Parse.Object.extend("Invite");
+var EventExtension = Parse.Object.extend("EventExtension");
+
 
 
 Parse.Cloud.define("authorize", function(request, response) {
@@ -110,6 +112,57 @@ Parse.Cloud.define("follow", function(request, response) {
   });
 });
 
+Parse.Cloud.define("vote", function(request, response) {
+  var sender = request.user;
+  var value = request.params.voteValue;
+  var eventId = request.params.eventId;
+  var fetchQuery = new Parse.Query(Parse.Object.extend("Event"));
+  fetchQuery.include("extension");
+  fetchQuery.get(eventId, {
+    success: function(eventObject) {
+      var owner = eventObject.get("owner");
+      var extension = eventObject.get("extension");
+      if (owner.id === sender.id) {
+        response.error(JSON.stringify({code: 110, message: "You cant vote for your event!"}));
+      } else if (indexOf.call(extension.get("voters"), sender.id) !== -1) {
+        response.error(JSON.stringify({code: 108, message: "You alredy vote for event!"}));
+      } else {
+        var weight = [-2, -1, 0, 1, 2];
+        extension.addUnique("voters", sender.id);
+        var raiting = extension.get("raiting") + weight[value];
+        extension.set("raiting", raiting);
+        extension.save(null, {
+          useMasterKey: true,
+          success: function() {
+            console.log("EventExtension save ok");
+            raiting = owner.get("raiting") + weight[value];
+            owner.set("raiting", raiting);
+            owner.save(null, {
+              useMasterKey: true,
+              success: function() {
+                console.log("Save vote ok");
+                response.success(eventObject);
+              },
+              error: function(object, error) {
+                console.log("Save vote error: "+error.code+" "+error.message);
+                response.error(JSON.stringify({code: 106, message: "vote save error"}));
+              }
+            });
+          },
+          error: function(object, error) {
+            console.log("EventExtension save error: "+error.code+" "+error.message);
+            response.error(JSON.stringify({code: 106, message: "EventExtension save error"}));
+          }
+        });
+      }
+    },
+    error: function(object, error) {
+      console.log("error: "+error.code+" "+error.message);
+      response.error(JSON.stringify({code: 109, message: "Event fetch error", error: error}));
+    } 
+  });
+});
+
 Parse.Cloud.define("invite", function(request, response) {
   var sender = request.user;
   var invitedId = request.params.invitedId;
@@ -121,32 +174,29 @@ Parse.Cloud.define("invite", function(request, response) {
   fetchQuery.get(eventId, {
     success: function(eventObject) {
       var privacyType = eventObject.get("privacy");
-      if (privacyType === 1) {
-        if (indexOf.call(eventObject.get("invited", sender.id))) {
-          response.error(JSON.stringify({code: 110, message: "You doesnt have permissions for this operation!"}));
-        }
-      } else if (privacyType === 2) {
         var owner = eventObject.get("owner");
-        if (owner.id !== sender.id) {
-          response.error(JSON.stringify({code: 110, message: "You doesnt have permissions for this operation!"}));
-        }
+      if (privacyType === 1 && indexOf.call(eventObject.get("invited"), sender.id) === -1) {
+        response.error(JSON.stringify({code: 110, message: "You doesnt have permissions for this operation!"}));
+      } else if (privacyType === 2 && owner.id !== sender.id) {
+        response.error(JSON.stringify({code: 110, message: "You doesnt have permissions for this operation!"}));
+      } else {
+        eventObject.addUnique("invited", invitedId);
+        eventObject.save(null, {
+          useMasterKey: true,
+          success: function() {
+            console.log("Event save ok");
+            inviteUser(eventObject, sender, invitedId, response);
+          },
+          error: function(object, error) {
+            console.log("Event save error: "+error.code+" "+error.message);
+            response.error(JSON.stringify({code: 106, message: "Event save error"}));
+          }
+        });
       }
-      eventObject.addUnique("invited", invitedId);
-      eventObject.save(null, {
-        useMasterKey: true,
-        success: function() {
-          console.log("Event save ok");
-          inviteUser(eventObject, sender, invitedId, response);
-        },
-        error: function(object, error) {
-          console.log("Event save error: "+error.code+" "+error.message);
-          response.error(JSON.stringify({code: 106, message: "Event save error"}));
-        }
-      });
     },
     error: function(object, error) {
-          console.log("error: "+error.code+" "+error.message);
-          response.error(JSON.stringify({code: 109, message: "Event fetch error", error: error}));
+      console.log("error: "+error.code+" "+error.message);
+      response.error(JSON.stringify({code: 109, message: "Event fetch error", error: error}));
     } 
   });
 });
@@ -155,30 +205,27 @@ Parse.Cloud.define("attend", function(request, response) {
   var sender = request.user;
   var eventId = request.params.eventId;
   var fetchQuery = new Parse.Query(Parse.Object.extend("Event"));
+  fetchQuery.include("price");
   fetchQuery.get(eventId, {
     success: function(eventObject) {
-      var privacyType = eventObject.get("privacy");
-      if (privacyType !== 0 && indexOf.call(eventObject.get('invited', sender.id)) === -1) {
-        response.error(JSON.stringify({code: 110, message: "You doesnt have permissions for this operation!"}));
+      var price = eventObject.get("price");
+      var pricingType = price.get('pricingType');
+      var minimumAmount = price.get('minimumAmount');
+      if (pricingType === 0 || (pricingType===1 && minimumAmount === 0)) {
+        eventObject.addUnique("attendees", sender.id);
+        eventObject.save(null, {
+          useMasterKey: true,
+          success: function() {
+            console.log("Event save ok");
+            response.success(eventObject);
+          },
+          error: function(object, error) {
+            console.log("Event save error: "+error.code+" "+error.message);
+            response.error(JSON.stringify({code: 106, message: "Event save error"}));
+          }
+        });
       } else {
-        var pricingType = eventObject.get('pricingType');
-        var minimumAmount = eventObject.get('minimumAmount');
-        if (pricingType===0 || (pricingType===2 && minimumAmount === 0)) {
-          eventObject.addUnique("attendees", sender.id);
-          eventObject.save(null, {
-            useMasterKey: true,
-            success: function() {
-              console.log("Event save ok");
-              response.success(eventObject);
-            },
-            error: function(object, error) {
-              console.log("Event save error: "+error.code+" "+error.message);
-              response.error(JSON.stringify({code: 106, message: "Event save error"}));
-            }
-          });
-        } else {
-          response.error(JSON.stringify({code: 111, message: "You should pay for this event!"}));
-        }
+        response.error(JSON.stringify({code: 111, message: "You should pay for this event!"}));
       }
     },
     error: function(object, error) {
@@ -208,7 +255,8 @@ var inviteUser = function(event, from, toId, response) {
           invite.save(null, {
             useMasterKey: true,
             success: function() {
-              console.log("Invite save ok");              response.success(event);              response.success(event);
+              console.log("Invite save ok");              
+              response.success(event);
             },
             error: function(object, error) {
               console.log("Invite save error: "+error.code+" "+error.message);
@@ -326,8 +374,8 @@ Parse.Cloud.define("charge", function(request, response)
       });
     },
     error: function(object, error) {
-          console.log("error: "+error.code+" "+error.message);
-          response.error(JSON.stringify({code: 109, message: "Event fetch error", error: error}));
+      console.log("error: "+error.code+" "+error.message);
+      response.error(JSON.stringify({code: 109, message: "Event fetch error", error: error}));
     } 
   });
 });
