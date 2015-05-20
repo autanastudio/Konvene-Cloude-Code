@@ -31,11 +31,13 @@
 
   function getPaymentInfo(user, callBack) {
     var userPayment = user.get('paymentInfo');
-    if (userPayment) {
+    console.log(userPayment);
+    if (userPayment !== undefined) {
       var fetchQuery = new Parse.Query(UserPayment);
       fetchQuery.get(userPayment.id, {
         success: function(paymentInfo) {
           if (paymentInfo) {
+            console.log("Payment info fetched");
             callBack(paymentInfo);
           } else {
             console.log("This payment info doesnt exist!");
@@ -44,7 +46,12 @@
         },
         error: function(object, error) {
           console.log("error: "+error.code+" "+error.message);
-          callBack();
+          userPayment = new UserPayment();
+          createCustomer(user, function(customerId){
+            console.log("Create new customer " + customerId);
+            userPayment.set("customerId", customerId);
+            callBack(userPayment);
+          });
         } 
       });
     } else {
@@ -113,20 +120,20 @@
               if (error) {
                 card.destroy({
                   success: function(myObject) {
-                    callBack(null);
+                    callBack(paymentInfo, null);
                   },
                   error: function(myObject, error) {
-                    callBack(error);
+                    callBack(null, error);
                   }
                 });
               } else {
-                callBack(error);
+                callBack(null, error);
               }
             });
           },
           error: function(object, error) {
             console.log("Save payment info error: "+error.code+" "+error.message);
-            callBack(error);
+            callBack(null, error);
           }
         });
       });
@@ -149,34 +156,31 @@
     });
   }
  
-  function changeSource(user, card, callBack) {
-    getPaymentInfo(user, function(paymentInfo){
-      Parse.Cloud.httpRequest({
-        method:"POST",
-        url: "https://" + stripeSecretKey + ':@' + strpeBaseURL + "/customers/" + paymentInfo.get("customerId"),
-        body: "source=" + card.get("cardId"),
-        success: function(httpResponse) {
-          callBack(null);
-        },
-        error: function(httpResponse) {
-          console.log('Request failed with response code ' + httpResponse.status);
-          var jsonResult = JSON.parse(httpResponse.text);
-          callBack(jsonResult.error.message);
-        }
-      });
+  function changeSource(customerId, card, callBack) {
+    Parse.Cloud.httpRequest({
+      method:"POST",
+      url: "https://" + stripeSecretKey + ':@' + strpeBaseURL + "/customers/" + customerId,
+      body: "source=" + card.get("cardId"),
+      success: function(httpResponse) {
+        callBack(null);
+      },
+      error: function(httpResponse) {
+        console.log('Request failed with response code ' + httpResponse.status);
+        var jsonResult = JSON.parse(httpResponse.text);
+        callBack(jsonResult.error.message);
+      }
     });
   }
 
   function charge(user, cardId, amount, callBack) {
     getCard(cardId, function(card){
-      changeSource(user, card, function(errorMessage){
-        if (errorMessage) {
-          callBack(null, errorMessage);
-        } else {
-          getPaymentInfo(user, function(paymentInfo){
-            //TODO change source
+      getPaymentInfo(user, function(paymentInfo){
+        changeSource(paymentInfo.get("customerId"), card, function(errorMessage){
+          if (errorMessage) {
+            callBack(null, errorMessage);
+          } else {
             var querystring = require('querystring');
-            var body = querystring.stringify({'amount':amount ,'currency':'usd','customer':paymentInfo.customerId});
+            var body = querystring.stringify({'amount':amount*100 ,'currency':'usd','customer':paymentInfo.get("customerId")});
 
             Parse.Cloud.httpRequest({
               method:"POST",
@@ -197,8 +201,8 @@
                 callBack(null, jsonResult.error.message);
               }
             });
-          });
-        }
+          }
+        });
       });
     });
   }

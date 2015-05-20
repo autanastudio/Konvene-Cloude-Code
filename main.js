@@ -223,7 +223,8 @@ Parse.Cloud.define("attend", function(request, response) {
       var price = eventObject.get("price");
       var pricingType = price.get('pricingType');
       var minimumAmount = price.get('minimumAmount');
-      if (pricingType === 0 || (pricingType===1 && minimumAmount === 0)) {
+      console.log("Min " + minimumAmount + " type " + pricingType);
+      if (pricingType === 0 || (pricingType===2 && minimumAmount === 0)) {
         eventObject.addUnique("attendees", sender.id);
         eventObject.save(null, {
           useMasterKey: true,
@@ -344,16 +345,16 @@ Parse.Cloud.define("deleteCard", function(request, response)
   var klpayment = require('cloud/klpayment.js');
   var owner = request.user;
   var cardId = request.params.cardId;
-  klpayment.removeCard(owner, cardId, function(errorMessage){
+  klpayment.removeCard(owner, cardId, function(paymentInfo, errorMessage){
     if (errorMessage) {
       response.error(JSON.stringify({code:111, message: errorMessage}));
     } else {
-      response.success();
+      response.success(paymentInfo);
     }
   });
 });
 
-Parse.Cloud.define("charge", function(request, response) 
+Parse.Cloud.define("buyTickets", function(request, response) 
 {
   var klpayment = require('cloud/klpayment.js');
   var owner = request.user;
@@ -361,29 +362,52 @@ Parse.Cloud.define("charge", function(request, response)
   var payValue = request.params.payValue;
   var eventId = request.params.eventId;
   var fetchQuery = new Parse.Query(Parse.Object.extend("Event"));
-  fetchQuery.includeKey("EventPrice");
+  fetchQuery.include("price");
   fetchQuery.get(eventId, {
     success: function(eventObject) {
-      klpayment.charge(user, cardId, amount, function(newCharge, errorMessage){
-        if (errorMessage) {
-          response.error(JSON.stringify({code:111, message: errorMessage}));
+      var price = eventObject.get("price");
+      var pricingType = price.get('pricingType');
+      if (pricingType !== 1) {
+        console.log("Wrong payment type");
+        response.error(JSON.stringify({code: 111, message: "Wrong payment type"}));
+      } else {
+        var soldTickets = price.get("soldTickets");
+        var maximumTickets = price.get("maximumTickets");
+        if (soldTickets+payValue > maximumTickets) {
+          console.log("This event sold out: "+error.code+" "+error.message);
+          response.error(JSON.stringify({code: 112, message: "Event sold out"}));
         } else {
-          newCharge.set('event', eventObject);
-          var price = eventObject.get('price');
-          price.addUnique(newCharge);
-          price.save(null, {
-            useMasterKey: true,
-            success: function() {
-              console.log("Save payment info ok");
-              response.success();
-            },
-            error: function(object, error) {
-              console.log("Save payment info error: "+error.code+" "+error.message);
-              response.error(JSON.stringify({code: 106, message: "PaymentInfo save error"}));
+          var amount = payValue * price.get("pricePerPerson");
+          klpayment.charge(owner, cardId, amount, function(newCharge, errorMessage){
+            if (errorMessage) {
+              response.error(JSON.stringify({code:111, message: errorMessage}));
+            } else {
+              newCharge.set('event', eventObject);
+              var price = eventObject.get('price');
+              price.addUnique("payments", newCharge);
+              if (soldTickets) {
+                soldTickets = soldTickets + payValue;
+              } else {
+                soldTickets = payValue;
+              }
+              price.set("soldTickets", soldTickets);
+              eventObject.set("price", price);
+              eventObject.addUnique("attendees", owner.id);
+              eventObject.save(null, {
+                useMasterKey: true,
+                success: function() {
+                  console.log("Event save ok");
+                  response.success(eventObject);
+                },
+                error: function(object, error) {
+                  console.log("Event save error: "+error.code+" "+error.message);
+                  response.error(JSON.stringify({code: 106, message: "Event save error"}));
+                }
+              });
             }
           });
         }
-      });
+      }
     },
     error: function(object, error) {
       console.log("error: "+error.code+" "+error.message);
@@ -391,6 +415,79 @@ Parse.Cloud.define("charge", function(request, response)
     } 
   });
 });
+
+Parse.Cloud.define("throwIn", function(request, response) 
+{
+  var klpayment = require('cloud/klpayment.js');
+  var owner = request.user;
+  var cardId = request.params.cardId;
+  var payValue = request.params.payValue;
+  var eventId = request.params.eventId;
+  var fetchQuery = new Parse.Query(Parse.Object.extend("Event"));
+  fetchQuery.include("price");
+  fetchQuery.get(eventId, {
+    success: function(eventObject) {
+      var price = eventObject.get("price");
+      var pricingType = price.get('pricingType');
+      if (pricingType !== 2) {
+        console.log("Wrong payment type");
+        response.error(JSON.stringify({code: 111, message: "Wrong payment type"}));
+      } else {
+        var minimumAmount = price.get("minimumAmount");
+        if (payValue < minimumAmount) {
+          console.log("You should pay more for this event");
+          response.error(JSON.stringify({code: 112, message: "You should pay more for this event"}));
+        } else {
+          klpayment.charge(owner, cardId, payValue, function(newCharge, errorMessage){
+            if (errorMessage) {
+              response.error(JSON.stringify({code:111, message: errorMessage}));
+            } else {
+              newCharge.set('event', eventObject);
+              var price = eventObject.get('price');
+              price.addUnique("payments", newCharge);
+              var gathered = price.get("throwIn")
+              if (gathered) {
+                gathered = gathered + payValue;
+              } else {
+                gathered = payValue;
+              }
+              price.set("throwIn", gathered);
+              eventObject.set("price", price);
+              eventObject.addUnique("attendees", owner.id);
+              eventObject.save(null, {
+                useMasterKey: true,
+                success: function() {
+                  console.log("Event save ok");
+                  response.success(eventObject);
+                },
+                error: function(object, error) {
+                  console.log("Event save error: "+error.code+" "+error.message);
+                  response.error(JSON.stringify({code: 106, message: "Event save error"}));
+                }
+              });
+            }
+          });
+        }
+      }
+    },
+    error: function(object, error) {
+      console.log("error: "+error.code+" "+error.message);
+      response.error(JSON.stringify({code: 109, message: "Event fetch error", error: error}));
+    } 
+  });
+});
+
+var activityType = {
+    KLActivityTypeFollowMe : 0,
+    KLActivityTypeFollow : 1,
+    KLActivityTypeCreateEvent : 2,
+    KLActivityTypeGoesToEvent : 3,
+    KLActivityTypeEventCanceled : 4,
+    KLActivityTypeEventChanged : 5,
+    KLActivityTypePhotosAdded : 6,
+    KLActivityTypeCommentAdded : 7,
+    KLActivityTypePayForEvent : 8
+}
 
 var indexOf = function(needle) {
   if(typeof Array.prototype.indexOf === 'function') {
