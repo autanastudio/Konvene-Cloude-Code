@@ -131,13 +131,23 @@ Parse.Cloud.define("vote", function(request, response) {
           eventObject.set("extension", extension);
         }
         extension.addUnique("voters", sender.id);
-        var raiting = extension.get("raiting") + weight[value];
+        var raiting = extension.get("raiting");
+        if (raiting) {
+          raiting = raiting + weight[value];
+        } else {
+          raiting = weight[value];
+        }
         extension.set("raiting", raiting);
         eventObject.save(null, {
           useMasterKey: true,
           success: function() {
             console.log("Event save ok");
-            raiting = owner.get("raiting") + weight[value];
+            raiting = owner.get("raiting");
+            if (raiting) {
+              raiting = raiting + weight[value];
+            } else {
+              raiting = weight[value];
+            }
             owner.set("raiting", raiting);
             owner.save(null, {
               useMasterKey: true,
@@ -348,7 +358,7 @@ Parse.Cloud.define("charge", function(request, response)
   var klpayment = require('cloud/klpayment.js');
   var owner = request.user;
   var cardId = request.params.cardId;
-  var amount = request.params.amount;
+  var payValue = request.params.payValue;
   var eventId = request.params.eventId;
   var fetchQuery = new Parse.Query(Parse.Object.extend("Event"));
   fetchQuery.includeKey("EventPrice");

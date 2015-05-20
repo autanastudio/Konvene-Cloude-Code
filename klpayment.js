@@ -1,6 +1,6 @@
   var UserPayment = Parse.Object.extend("UserPayment");
   var Card = Parse.Object.extend("Card");
-  var KonvenePayment = Parse.Object.extend("KonvenePayment");
+  var KonvenePayment = Parse.Object.extend("Charge");
 
   var stripeSecretKey = "sk_test_4ZGEKkDI9mNRzfaHlt1R5w3c";
   var strpeBaseURL = "api.stripe.com/v1"; 
