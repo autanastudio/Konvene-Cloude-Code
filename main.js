@@ -1,5 +1,6 @@
 var Invite = Parse.Object.extend("Invite");
 var EventExtension = Parse.Object.extend("EventExtension");
+var Activity = Parse.Object.extend("Activity");
 
 Parse.Cloud.define("authorize", function(request, response) {
   var klauth = require('cloud/klauth.js');
@@ -76,12 +77,25 @@ Parse.Cloud.define("follow", function(request, response) {
               useMasterKey: true,
               success: function() {
                 console.log("Sender save ok");
-
                 following.save(null, {
                   useMasterKey: true,
                   success: function() {
                     console.log("Following save ok");
-                    response.success(sender);
+
+                    addActivity(activityType.KLActivityTypeFollowMe, sender, null, following, null, function(errorMessage){
+                      if (errorMessage) {
+                        response.error(errorMessage);
+                      } else {
+                        addActivity(activityType.KLActivityTypeFollow, sender, null, following, null, function(errorMessage){
+                          if (errorMessage) {
+                            response.error(errorMessage);
+                          } else {
+                            response.success(sender);
+                          }
+                        });
+                      }
+                    });
+
                   },
                   error: function(object, error) {
                     console.log("Following save error: "+error.code+" "+error.message);
@@ -230,7 +244,21 @@ Parse.Cloud.define("attend", function(request, response) {
           useMasterKey: true,
           success: function() {
             console.log("Event save ok");
-            response.success(eventObject);
+
+            addActivity(activityType.KLActivityTypeGoesToMyEvent, sender, eventObject, eventObject.get("owner"), null, function(errorMessage){
+              if (errorMessage) {
+                response.error(errorMessage);
+              } else {
+                addActivity(activityType.KLActivityTypeGoesToEvent, sender, eventObject, null, null, function(errorMessage){
+                  if (errorMessage) {
+                    response.error(errorMessage);
+                  } else {
+                    response.success(eventObject);
+                  }
+                });
+              }
+            });
+
           },
           error: function(object, error) {
             console.log("Event save error: "+error.code+" "+error.message);
@@ -293,11 +321,26 @@ Parse.Cloud.afterSave("Event", function(request) {
       useMasterKey: true,
       success: function() {
         console.log("Create event ok");
+        addActivity(activityType.KLActivityTypeCreateEvent, owner, request.object, null, null, function(errorMessage){
+          if (errorMessage) {
+            console.log(errorMessage);
+          }
+        });
+
       },
       error: function(object, error) {
         console.log("Create event error: "+error.code+" "+error.message);
       }
     });
+  } else {
+    if (request.user) {
+      addActivity(activityType.KLActivityTypeEventChanged, owner, request.object, null, null, function(errorMessage){
+        if (errorMessage) {
+          console.log(errorMessage);
+        }
+        callback();
+      });
+    }
   }
 });
 
@@ -308,6 +351,11 @@ Parse.Cloud.afterDelete("Event", function(request) {
     useMasterKey: true,
     success: function() {
       console.log("Remove event ok");
+      addActivity(activityType.KLActivityTypeEventCanceled, owner, request.object, null, null, function(errorMessage){
+          if (errorMessage) {
+            console.log(errorMessage);
+          }
+      });
     },
     error: function(object, error) {
       console.log("Remove event error: "+error.code+" "+error.message);
@@ -397,7 +445,15 @@ Parse.Cloud.define("buyTickets", function(request, response)
                 useMasterKey: true,
                 success: function() {
                   console.log("Event save ok");
-                  response.success(eventObject);
+
+                  addActivity(activityType.KLActivityTypePayForEvent, owner, eventObject, eventObject.get("owner"), null, function(errorMessage){
+                    if (errorMessage) {
+                      response.error(errorMessage);
+                    } else {
+                      response.success(eventObject);
+                    }
+                  });
+
                 },
                 error: function(object, error) {
                   console.log("Event save error: "+error.code+" "+error.message);
@@ -458,7 +514,14 @@ Parse.Cloud.define("throwIn", function(request, response)
                 useMasterKey: true,
                 success: function() {
                   console.log("Event save ok");
-                  response.success(eventObject);
+
+                  addActivity(activityType.KLActivityTypePayForEvent, owner, eventObject, eventObject.get("owner"), null, function(errorMessage){
+                    if (errorMessage) {
+                      response.error(errorMessage);
+                    } else {
+                      response.success(eventObject);
+                    }
+                  });
                 },
                 error: function(object, error) {
                   console.log("Event save error: "+error.code+" "+error.message);
@@ -478,15 +541,224 @@ Parse.Cloud.define("throwIn", function(request, response)
 });
 
 var activityType = {
-    KLActivityTypeFollowMe : 0,
-    KLActivityTypeFollow : 1,
-    KLActivityTypeCreateEvent : 2,
-    KLActivityTypeGoesToEvent : 3,
-    KLActivityTypeEventCanceled : 4,
-    KLActivityTypeEventChanged : 5,
-    KLActivityTypePhotosAdded : 6,
-    KLActivityTypeCommentAdded : 7,
-    KLActivityTypePayForEvent : 8
+    KLActivityTypeFollowMe :              0,
+    KLActivityTypeFollow :                1,
+    KLActivityTypeCreateEvent :           2,
+    KLActivityTypeGoesToEvent :           3,
+    KLActivityTypeGoesToMyEvent :         4,
+    KLActivityTypeEventCanceled :         5,
+    KLActivityTypeEventChangedName :      6,
+    KLActivityTypeEventChangedLocation :  7,
+    KLActivityTypeEventChangedTime :      8,
+    KLActivityTypePhotosAdded :           9,
+    KLActivityTypeCommentAdded :          10,
+    KLActivityTypePayForEvent :           11
+}
+
+function addActivity(type, from, event, to, photo, callback) {
+  switch (type) {
+    case activityType.KLActivityTypeFollowMe:
+        var query = new Parse.Query(Activity);
+        query.equalTo("activityType", type);
+        query.equalTo("observers", to.id);
+        query.first({
+          success: function (oldActivity) {
+            if (!oldActivity) {
+              oldActivity = new Activity();
+              oldActivity.set("activityType", type);
+              oldActivity.addUnique("observers", to.id);
+            }
+            oldActivity.addUnique("users", from);
+            oldActivity.save(null, {
+              useMasterKey: true,
+              success: function() {
+                console.log("Activity save ok");
+                callback(null);
+              },
+              error: function(object, error) {
+                console.log("Activity save error: "+error.code+" "+error.message);
+                callback(JSON.stringify({code: 106, message: "Activity save error"}));
+              }
+            });
+          },
+          error: function (error) {
+            callback(error.message);
+          }
+        });
+        break;
+    case activityType.KLActivityTypeFollow:
+        var query = new Parse.Query(Activity);
+        query.equalTo("activityType", type);
+        query.equalTo("from", from);
+        query.first({
+          success: function (oldActivity) {
+            console.log(oldActivity);
+            if (!oldActivity) {
+              oldActivity = new Activity();
+              oldActivity.set("activityType", type);
+              oldActivity.set("from", from);
+              oldActivity.set("observers", from.get("followers"));
+            }
+            oldActivity.addUnique("users", to);
+            oldActivity.save(null, {
+              useMasterKey: true,
+              success: function() {
+                console.log("Activity save ok");
+                callback(null);
+              },
+              error: function(object, error) {
+                console.log("Activity save error: "+error.code+" "+error.message);
+                callback(JSON.stringify({code: 106, message: "Activity save error"}));
+              }
+            });
+          },
+          error: function (error) {
+            callback(error.message);
+          }
+        });
+        break;
+    case activityType.KLActivityTypeCreateEvent:
+        oldActivity = new Activity();
+        oldActivity.set("activityType", type);
+        oldActivity.set("from", from);
+        oldActivity.set("event", event);
+        oldActivity.set("observers", from.get("followers"));
+        oldActivity.save(null, {
+          useMasterKey: true,
+          success: function() {
+            console.log("Activity save ok");
+            callback(null);
+          },
+          error: function(object, error) {
+            console.log("Activity save error: "+error.code+" "+error.message);
+            callback(JSON.stringify({code: 106, message: "Activity save error"}));
+          }
+        });
+        break;
+    case activityType.KLActivityTypeGoesToEvent:
+        oldActivity = new Activity();
+        oldActivity.set("activityType", type);
+        oldActivity.set("from", from);
+        oldActivity.set("event", event);
+        oldActivity.set("observers", from.get("followers"));
+        oldActivity.save(null, {
+          useMasterKey: true,
+          success: function() {
+            console.log("Activity save ok");
+            callback(null);
+          },
+          error: function(object, error) {
+            console.log("Activity save error: "+error.code+" "+error.message);
+            callback(JSON.stringify({code: 106, message: "Activity save error"}));
+          }
+        });
+        break;
+    case activityType.KLActivityTypeGoesToMyEvent:
+        var query = new Parse.Query(Activity);
+        query.equalTo("activityType", type);
+        query.equalTo("observers", to.id);
+        query.equalTo("event", event);
+        query.first({
+          success: function (oldActivity) {
+            if (!oldActivity) {
+              oldActivity = new Activity();
+              oldActivity.set("activityType", type);
+              oldActivity.set("event", event);
+              oldActivity.addUnique("observers", to.id);
+            }
+            oldActivity.addUnique("users", from);
+            oldActivity.save(null, {
+              useMasterKey: true,
+              success: function() {
+                console.log("Activity save ok");
+                callback(null);
+              },
+              error: function(object, error) {
+                console.log("Activity save error: "+error.code+" "+error.message);
+                callback(JSON.stringify({code: 106, message: "Activity save error"}));
+              }
+            });
+          },
+          error: function (error) {
+            callback(error.message);
+          }
+        });
+        break;
+    case activityType.KLActivityTypeEventCanceled:
+        oldActivity = new Activity();
+        oldActivity.set("activityType", type);
+        oldActivity.set("from", from);
+        oldActivity.set("event", event);
+        var attendees = event.get("attendees");
+        var savers = event.get("savers");
+        if (attendees && savers) {
+          oldActivity.set("observers", attendees.concat(savers));
+        } else if (attendees) {
+          oldActivity.set("observers", attendees);
+        } else if (savers) {
+          oldActivity.set("observers", savers);
+        }
+        oldActivity.save(null, {
+          useMasterKey: true,
+          success: function() {
+            console.log("Activity save ok");
+            callback(null);
+          },
+          error: function(object, error) {
+            console.log("Activity save error: "+error.code+" "+error.message);
+            callback(JSON.stringify({code: 106, message: "Activity save error"}));
+          }
+        });
+        break;
+    case activityType.KLActivityTypeEventChanged:
+        oldActivity = new Activity();
+        oldActivity.set("activityType", type);
+        oldActivity.set("from", from);
+        oldActivity.set("event", event);
+        var attendees = event.get("attendees");
+        var savers = event.get("savers");
+        if (attendees && savers) {
+          oldActivity.set("observers", attendees.concat(savers));
+        } else if (attendees) {
+          oldActivity.set("observers", attendees);
+        } else if (savers) {
+          oldActivity.set("observers", savers);
+        }
+        oldActivity.save(null, {
+          useMasterKey: true,
+          success: function() {
+            console.log("Activity save ok");
+            callback(null);
+          },
+          error: function(object, error) {
+            console.log("Activity save error: "+error.code+" "+error.message);
+            callback(JSON.stringify({code: 106, message: "Activity save error"}));
+          }
+        });
+        break;
+    case activityType.KLActivityTypePayForEvent:
+        oldActivity = new Activity();
+        oldActivity.set("activityType", type);
+        oldActivity.set("from", from);
+        oldActivity.set("event", event);
+        oldActivity.addUnique("observers", to.id);
+        oldActivity.save(null, {
+          useMasterKey: true,
+          success: function() {
+            console.log("Activity save ok");
+            callback(null);
+          },
+          error: function(object, error) {
+            console.log("Activity save error: "+error.code+" "+error.message);
+            callback(JSON.stringify({code: 106, message: "Activity save error"}));
+          }
+        });
+        break;
+    default:
+        console.log("Unknown activity type");
+        callback(JSON.stringify({code: 101, message: "Unknown activity type"}));
+        break;
+  }
 }
 
 var indexOf = function(needle) {
