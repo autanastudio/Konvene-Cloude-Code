@@ -46,6 +46,22 @@ Parse.Cloud.define("checkUsersFromContacts", function(request, response) {
   });
 });
 
+Parse.Cloud.define("deleteUser", function(request, response) {
+  var sender = request.user;
+  sender.set('isDeleted', 1);
+  sender.save(null, {
+    useMasterKey: true,
+    success: function() {
+      console.log("Delete user ok");
+      response.success(sender);
+    },
+    error: function(object, error) {
+      console.log("Save user error: "+error.code+" "+error.message);
+      response.error(JSON.stringify({code: 101, message: "Error while deleting!"}));
+    }
+  });
+});
+
 Parse.Cloud.define("follow", function(request, response) {
   var sender = request.user;
   var followingId = request.params.followingId;
@@ -321,10 +337,21 @@ Parse.Cloud.afterSave("Event", function(request) {
       useMasterKey: true,
       success: function() {
         console.log("Create event ok");
-        addActivity(activityType.KLActivityTypeCreateEvent, owner, request.object, null, null, function(errorMessage){
-          if (errorMessage) {
-            console.log(errorMessage);
-          }
+        var fetchQuery = new Parse.Query(Parse.User);
+        fetchQuery.get(owner.id, {
+          success: function(user) {
+            if (user) {
+              addActivity(activityType.KLActivityTypeCreateEvent, user, request.object, null, null, function(errorMessage){
+                if (errorMessage) {
+                  console.log(errorMessage);
+                }
+              });
+            }
+          },
+          error: function(object, error) {
+            console.log("error: "+error.code+" "+error.message);
+            callBack();
+          } 
         });
 
       },
@@ -332,15 +359,6 @@ Parse.Cloud.afterSave("Event", function(request) {
         console.log("Create event error: "+error.code+" "+error.message);
       }
     });
-  } else {
-    if (request.user) {
-      addActivity(activityType.KLActivityTypeEventChanged, owner, request.object, null, null, function(errorMessage){
-        if (errorMessage) {
-          console.log(errorMessage);
-        }
-        callback();
-      });
-    }
   }
 });
 
@@ -597,8 +615,8 @@ function addActivity(type, from, event, to, photo, callback) {
               oldActivity = new Activity();
               oldActivity.set("activityType", type);
               oldActivity.set("from", from);
-              oldActivity.set("observers", from.get("followers"));
             }
+            oldActivity.set("observers", from.get("followers"));
             oldActivity.addUnique("users", to);
             oldActivity.save(null, {
               useMasterKey: true,
