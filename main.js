@@ -216,7 +216,7 @@ Parse.Cloud.define("invite", function(request, response) {
   fetchQuery.get(eventId, {
     success: function(eventObject) {
       var privacyType = eventObject.get("privacy");
-        var owner = eventObject.get("owner");
+      var owner = eventObject.get("owner");
       if (privacyType === 1 && indexOf.call(eventObject.get("invited"), sender.id) === -1) {
         response.error(JSON.stringify({code: 110, message: "You doesnt have permissions for this operation!"}));
       } else if (privacyType === 2 && owner.id !== sender.id) {
@@ -573,6 +573,87 @@ var activityType = {
     KLActivityTypePayForEvent :           11
 }
 
+Parse.Cloud.afterSave("Activity", function(request) {
+
+  var query = new Parse.Query(Parse.Installation);
+
+  var fetchQuery = new Parse.Query(Activity);
+  fetchQuery.include("from");
+  fetchQuery.include("event");
+  fetchQuery.include("users");
+  fetchQuery.get(request.object.id, {
+    success: function(activity) {
+
+      query.equalTo("notifications", activity.get("activityType"));
+      console.log(activity.get("observers"));
+      query.containedIn("user", activity.get("observers"));
+
+      var users = activity.get("users");
+      var lastUser;
+      if (users) {
+        lastUser = users[users.length - 1];
+      }
+
+      var messageText = "";
+      switch (activity.get("activityType")) {
+        case activityType.KLActivityTypeFollowMe:
+            messageText = lastUser.get("fullName") + " started following you.";
+            break;
+        case activityType.KLActivityTypeFollow:
+            messageText = activity.get("from").get("fullName") + " started following " + lastUser.get("fullName") + ".";
+            break;
+        case activityType.KLActivityTypeCreateEvent:
+            messageText = activity.get("from").get("fullName") + " created event.";
+            break;
+        case activityType.KLActivityTypeGoesToEvent:
+            messageText = activity.get("from").get("fullName") + " goes to the event.";
+            break;
+        case activityType.KLActivityTypeGoesToMyEvent:
+            messageText = activity.get("from").get("fullName") + " goes to your event.";
+            break;
+        case activityType.KLActivityTypeEventCanceled:
+            messageText = "Event " + activity.get("event").get("title") + " has been canceled.";
+            break;
+        case activityType.KLActivityTypeEventChangedName:
+        case activityType.KLActivityTypeEventChangedTime:
+        case activityType.KLActivityTypeEventChangedLocation:
+            messageText = "Event " + activity.get("event").get("title") + " has been changed.";
+            break;
+        case activityType.KLActivityTypePayForEvent:
+            messageText = activity.get("from").get("fullName") + " paid for your event";
+            break;
+        case activityType.KLActivityTypePhotosAdded:
+            messageText = "Somene add photo to your event.";
+            break;
+        case activityType.KLActivityTypeCommentAdded:
+            messageText = "Someone add comment to your event.";
+            break;
+        default:
+            break;
+      }
+      console.log(messageText);
+
+      Parse.Push.send({
+        where: query,
+        data: {
+          alert: messageText
+        }
+      }, {
+        success: function() {
+          console.log("Send push successfuly!");
+        },
+        error: function(error) {
+          console.log("Push notification error");
+          console.log(error);
+        }
+      });
+    },
+    error: function(object, error) {
+      console.log("error: "+error.code+" "+error.message);
+    } 
+  });
+});
+
 function addActivity(type, from, event, to, photo, callback) {
   switch (type) {
     case activityType.KLActivityTypeFollowMe:
@@ -703,32 +784,6 @@ function addActivity(type, from, event, to, photo, callback) {
         });
         break;
     case activityType.KLActivityTypeEventCanceled:
-        oldActivity = new Activity();
-        oldActivity.set("activityType", type);
-        oldActivity.set("from", from);
-        oldActivity.set("event", event);
-        var attendees = event.get("attendees");
-        var savers = event.get("savers");
-        if (attendees && savers) {
-          oldActivity.set("observers", attendees.concat(savers));
-        } else if (attendees) {
-          oldActivity.set("observers", attendees);
-        } else if (savers) {
-          oldActivity.set("observers", savers);
-        }
-        oldActivity.save(null, {
-          useMasterKey: true,
-          success: function() {
-            console.log("Activity save ok");
-            callback(null);
-          },
-          error: function(object, error) {
-            console.log("Activity save error: "+error.code+" "+error.message);
-            callback(JSON.stringify({code: 106, message: "Activity save error"}));
-          }
-        });
-        break;
-    case activityType.KLActivityTypeEventChanged:
         oldActivity = new Activity();
         oldActivity.set("activityType", type);
         oldActivity.set("from", from);
