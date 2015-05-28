@@ -609,7 +609,7 @@ Parse.Cloud.afterSave("Activity", function(request) {
             messageText = activity.get("from").get("fullName") + " goes to the event.";
             break;
         case activityType.KLActivityTypeGoesToMyEvent:
-            messageText = activity.get("from").get("fullName") + " goes to your event.";
+            messageText = lastUser.get("fullName") + " goes to your event.";
             break;
         case activityType.KLActivityTypeEventCanceled:
             messageText = "Event " + activity.get("event").get("title") + " has been canceled.";
