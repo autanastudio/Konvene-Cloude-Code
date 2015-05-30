@@ -209,6 +209,10 @@ Parse.Cloud.define("invite", function(request, response) {
   var sender = request.user;
   var invitedId = request.params.invitedId;
   var eventId = request.params.eventId;
+  var isInvite = request.params.isInvite;
+  if (isInvite === undefined) {
+    isInvite = 1;
+  }
   if (sender.id === invitedId) {
     response.error(JSON.stringify({code: 105, message: "You cannot invite yourself!"}));
   }
@@ -222,12 +226,21 @@ Parse.Cloud.define("invite", function(request, response) {
       } else if (privacyType === 2 && owner.id !== sender.id) {
         response.error(JSON.stringify({code: 110, message: "You doesnt have permissions for this operation!"}));
       } else {
-        eventObject.addUnique("invited", invitedId);
+        if (isInvite) {
+          eventObject.addUnique("invited", invitedId);
+        } else {
+          eventObject.remove("invited", invitedId);
+        }
         eventObject.save(null, {
           useMasterKey: true,
           success: function() {
             console.log("Event save ok");
-            inviteUser(eventObject, sender, invitedId, response);
+            if (isInvite) {
+              inviteUser(eventObject, sender, invitedId, response);
+            } else {
+              console.log(isInvite);
+              deleteInviteUser(eventObject, sender, invitedId, response);
+            }
           },
           error: function(object, error) {
             console.log("Event save error: "+error.code+" "+error.message);
@@ -255,32 +268,47 @@ Parse.Cloud.define("attend", function(request, response) {
       var minimumAmount = price.get('minimumAmount');
       console.log("Min " + minimumAmount + " type " + pricingType);
       if (pricingType === 0 || (pricingType===2 && minimumAmount === 0)) {
-        eventObject.addUnique("attendees", sender.id);
-        eventObject.save(null, {
-          useMasterKey: true,
-          success: function() {
-            console.log("Event save ok");
+        if (indexOf.call(eventObject.get("attendees"), sender.id) !== -1) {
+          eventObject.remove("attendees", sender.id);
+          eventObject.save(null, {
+            useMasterKey: true,
+            success: function() {
+              console.log("Event save ok");
+              response.success(eventObject);
+            },
+            error: function(object, error) {
+              console.log("Event save error: "+error.code+" "+error.message);
+              response.error(JSON.stringify({code: 106, message: "Event save error"}));
+            }
+          });
+        } else {
+          eventObject.addUnique("attendees", sender.id);
+          eventObject.save(null, {
+            useMasterKey: true,
+            success: function() {
+              console.log("Event save ok");
 
-            addActivity(activityType.KLActivityTypeGoesToMyEvent, sender, eventObject, eventObject.get("owner"), null, function(errorMessage){
-              if (errorMessage) {
-                response.error(errorMessage);
-              } else {
-                addActivity(activityType.KLActivityTypeGoesToEvent, sender, eventObject, null, null, function(errorMessage){
-                  if (errorMessage) {
-                    response.error(errorMessage);
-                  } else {
-                    response.success(eventObject);
-                  }
-                });
-              }
-            });
+              addActivity(activityType.KLActivityTypeGoesToMyEvent, sender, eventObject, eventObject.get("owner"), null, function(errorMessage){
+                if (errorMessage) {
+                  response.error(errorMessage);
+                } else {
+                  addActivity(activityType.KLActivityTypeGoesToEvent, sender, eventObject, null, null, function(errorMessage){
+                    if (errorMessage) {
+                      response.error(errorMessage);
+                    } else {
+                      response.success(eventObject);
+                    }
+                  });
+                }
+              });
 
-          },
-          error: function(object, error) {
-            console.log("Event save error: "+error.code+" "+error.message);
-            response.error(JSON.stringify({code: 106, message: "Event save error"}));
-          }
-        });
+            },
+            error: function(object, error) {
+              console.log("Event save error: "+error.code+" "+error.message);
+              response.error(JSON.stringify({code: 106, message: "Event save error"}));
+            }
+          });
+        }
       } else {
         response.error(JSON.stringify({code: 111, message: "You should pay for this event!"}));
       }
@@ -324,9 +352,40 @@ var inviteUser = function(event, from, toId, response) {
       },
       error: function(error) {
         console.log("error: " + error.code + " " + error.message);
-         
+        response.error(JSON.stringify({code: 106, message: "Invite delete error"}));
       }
     });
+};
+
+var deleteInviteUser = function(event, from, toId, response) {
+  var query = new Parse.Query(Invite);
+  var to = new Parse.User();
+  to.id = toId;
+  query.equalTo('to', to);
+  query.equalTo('event', event);
+  query.first({
+    success: function(invite) {
+      if(invite) {
+        invite.destroy({
+          useMasterKey: true,
+          success: function() {
+            console.log("Invite delete ok");              
+            response.success(event);
+          },
+          error: function(object, error) {
+            console.log("Invite save error: "+error.code+" "+error.message);
+            response.error(JSON.stringify({code: 106, message: "Invite delete error"}));
+          }
+        });
+      } else {
+        response.error(JSON.stringify({code: 108, message: "Cant find this invite"}));
+      }
+    },
+    error: function(error) {
+      console.log("error: " + error.code + " " + error.message);
+      response.error(JSON.stringify({code: 106, message: "Invite delete error"}));
+    }
+  });
 };
 
 Parse.Cloud.afterSave("Event", function(request) {

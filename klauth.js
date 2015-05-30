@@ -13,8 +13,8 @@
   var Buffer = require("buffer").Buffer;
   
   function requireCode(phoneNumber) {
-    var code = _.random(100000, 999999).toString();
-    // var code = String(123321);
+    // var code = _.random(100000, 999999).toString();
+    var code = String(123321);
  
  
     var query = new Parse.Query(Parse.User);
