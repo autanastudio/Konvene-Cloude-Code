@@ -1,31 +1,31 @@
   
-  var venmoSecretKey = "XFp4fATwFMHefDVu2rXWEXc2AvNMfVGS";
-  var venmoBaseURL = "api.venmo.com/v1";
-  var venmoClientId = "2662";
+  // var venmoSecretKey = "XFp4fATwFMHefDVu2rXWEXc2AvNMfVGS";
+  // var venmoBaseURL = "api.venmo.com/v1";
+  // var venmoClientId = "2662";
 
-  function authorizeWithStripeConnect(user, code, callBack) {
+  // function authorizeWithStripeConnect(user, code, callBack) {
 
-    var querystring = require('querystring');
-    var body = querystring.stringify({'client_secret':stripeSecretKey , 'code':code, 'client_id': venmoClientId});
+  //   var querystring = require('querystring');
+  //   var body = querystring.stringify({'client_secret':stripeSecretKey , 'code':code, 'client_id': venmoClientId});
 
-    Parse.Cloud.httpRequest({
-      method:"POST",
-        url: "https://" + strpeBaseURL + "/oauth/access_token/",
-      url: "https://connect.stripe.com/oauth/token",
-      body: body,
-      success: function(httpResponse) {
-        var jsonResult = JSON.parse(httpResponse.text);
-        console.log(jsonResult);
-        user.set('stripeId', jsonResult.stripe_user_id);
-        callBack(user);
-      },
-      error: function(httpResponse) {
-        console.log('Request failed with response code ' + httpResponse.status);
-        var jsonResult = JSON.parse(httpResponse.text);
-        callBack(null, jsonResult.error.message);
-      }
-    });
-  }
+  //   Parse.Cloud.httpRequest({
+  //     method:"POST",
+  //       url: "https://" + strpeBaseURL + "/oauth/access_token/",
+  //     url: "https://connect.stripe.com/oauth/token",
+  //     body: body,
+  //     success: function(httpResponse) {
+  //       var jsonResult = JSON.parse(httpResponse.text);
+  //       console.log(jsonResult);
+  //       user.set('stripeId', jsonResult.stripe_user_id);
+  //       callBack(user);
+  //     },
+  //     error: function(httpResponse) {
+  //       console.log('Request failed with response code ' + httpResponse.status);
+  //       var jsonResult = JSON.parse(httpResponse.text);
+  //       callBack(null, jsonResult.error.message);
+  //     }
+  //   });
+  // }
 
   //TODO delete this old part with stripe
 

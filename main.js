@@ -221,9 +221,9 @@ Parse.Cloud.define("invite", function(request, response) {
     success: function(eventObject) {
       var privacyType = eventObject.get("privacy");
       var owner = eventObject.get("owner");
-      if (privacyType === 1 && indexOf.call(eventObject.get("invited"), sender.id) === -1) {
+      if (privacyType === 2 && !(indexOf.call((eventObject.get("invited"), sender.id) !== -1) || (owner.id === sender.id))) {
         response.error(JSON.stringify({code: 110, message: "You doesnt have permissions for this operation!"}));
-      } else if (privacyType === 2 && owner.id !== sender.id) {
+      } else if (privacyType === 1 && owner.id !== sender.id) {
         response.error(JSON.stringify({code: 110, message: "You doesnt have permissions for this operation!"}));
       } else {
         if (isInvite) {
@@ -332,6 +332,7 @@ var inviteUser = function(event, from, toId, response) {
           response.error(JSON.stringify({code: 108, message: "You alredy invite this user"}));
         } else {
           console.log("Invite not found, creating new one");
+          to.set("invited", 1);
           invite = new Invite();
           invite.set('from', from);
           invite.set('to', to);
@@ -655,6 +656,44 @@ var activityType = {
     KLActivityTypeCommentAdded :          10,
     KLActivityTypePayForEvent :           11
 }
+
+Parse.Cloud.afterSave("Invite", function(request) {
+
+  var query = new Parse.Query(Parse.Installation);
+
+  var fetchQuery = new Parse.Query(Invite);
+  fetchQuery.include("from");
+  fetchQuery.include("event");
+  fetchQuery.include("to");
+  fetchQuery.get(request.object.id, {
+    success: function(invite) {
+
+      query.equalTo("user", invite.get("to").id);
+
+      messageText = invite.get("from").get("fullName") + " invite you to " + invite.get("event").get("title") + ".";
+      console.log(messageText);
+
+      Parse.Push.send({
+        where: query,
+        data: {
+          alert: messageText,
+          badge: "Increment"
+        }
+      }, {
+        success: function() {
+          console.log("Send push successfuly!");
+        },
+        error: function(error) {
+          console.log("Push notification error");
+          console.log(error);
+        }
+      });
+    },
+    error: function(object, error) {
+      console.log("error: "+error.code+" "+error.message);
+    } 
+  });
+});
 
 Parse.Cloud.afterSave("Activity", function(request) {
 
