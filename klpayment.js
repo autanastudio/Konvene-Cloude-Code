@@ -1,3 +1,34 @@
+  
+  var venmoSecretKey = "XFp4fATwFMHefDVu2rXWEXc2AvNMfVGS";
+  var venmoBaseURL = "api.venmo.com/v1";
+  var venmoClientId = "2662";
+
+  function authorizeWithStripeConnect(user, code, callBack) {
+
+    var querystring = require('querystring');
+    var body = querystring.stringify({'client_secret':stripeSecretKey , 'code':code, 'client_id': venmoClientId});
+
+    Parse.Cloud.httpRequest({
+      method:"POST",
+        url: "https://" + strpeBaseURL + "/oauth/access_token/",
+      url: "https://connect.stripe.com/oauth/token",
+      body: body,
+      success: function(httpResponse) {
+        var jsonResult = JSON.parse(httpResponse.text);
+        console.log(jsonResult);
+        user.set('stripeId', jsonResult.stripe_user_id);
+        callBack(user);
+      },
+      error: function(httpResponse) {
+        console.log('Request failed with response code ' + httpResponse.status);
+        var jsonResult = JSON.parse(httpResponse.text);
+        callBack(null, jsonResult.error.message);
+      }
+    });
+  }
+
+  //TODO delete this old part with stripe
+
   var UserPayment = Parse.Object.extend("UserPayment");
   var Card = Parse.Object.extend("Card");
   var KonvenePayment = Parse.Object.extend("Charge");
@@ -156,6 +187,29 @@
       }
     });
   }
+
+  function authorizeWithStripeConnect(user, code, callBack) {
+
+    var querystring = require('querystring');
+    var body = querystring.stringify({'client_secret':stripeSecretKey , 'code':code, 'grant_type':'authorization_code'});
+
+    Parse.Cloud.httpRequest({
+      method:"POST",
+      url: "https://connect.stripe.com/oauth/token",
+      body: body,
+      success: function(httpResponse) {
+        var jsonResult = JSON.parse(httpResponse.text);
+        console.log(jsonResult);
+        user.set('stripeId', jsonResult.stripe_user_id);
+        callBack(user);
+      },
+      error: function(httpResponse) {
+        console.log('Request failed with response code ' + httpResponse.status);
+        var jsonResult = JSON.parse(httpResponse.text);
+        callBack(null, jsonResult.error.message);
+      }
+    });
+  }
  
   function changeSource(customerId, card, callBack) {
     Parse.Cloud.httpRequest({
@@ -173,7 +227,7 @@
     });
   }
 
-  function charge(user, cardId, amount, callBack) {
+  function charge(user, cardId, destination, amount, callBack) {
     getCard(cardId, function(card){
       getPaymentInfo(user, function(paymentInfo){
         changeSource(paymentInfo.get("customerId"), card, function(errorMessage){
@@ -181,7 +235,15 @@
             callBack(null, errorMessage);
           } else {
             var querystring = require('querystring');
-            var body = querystring.stringify({'amount':amount*100 ,'currency':'usd','customer':paymentInfo.get("customerId")});
+            var amountForCharge = amount*100;
+            var percent = amountForCharge*0.02;
+            var body = querystring.stringify({
+              'amount': amountForCharge,
+              'currency':'usd',
+              'customer': paymentInfo.get("customerId"),
+              // 'destination': destination,
+              // 'application_fee': amountForCharge,
+            });
 
             Parse.Cloud.httpRequest({
               method:"POST",
@@ -211,5 +273,6 @@
 module.exports = {
   addCard: addCard,
   removeCard: removeCard,
-  charge: charge
+  charge: charge,
+  authorizeWithStripeConnect : authorizeWithStripeConnect,
 };

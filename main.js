@@ -465,6 +465,30 @@ Parse.Cloud.define("addCard", function(request, response)
   });
 });
 
+Parse.Cloud.define("authStripeConnect", function(request, response) 
+{
+  var klpayment = require('cloud/klpayment.js');
+  var owner = request.user;
+  var code = request.params.code;
+  klpayment.authorizeWithStripeConnect(owner, code, function(user, errorMessage){
+    if (errorMessage) {
+      response.error(JSON.stringify({code:111, message: errorMessage}));
+    } else {
+      user.save(null, {
+        useMasterKey: true,
+        success: function() {
+          console.log("Save user ok");
+          response.success(user);
+        },
+        error: function(object, error) {
+          console.log("Save user error: "+error.code+" "+error.message);
+          response.error(JSON.stringify({code: 106, message: "User save error"}));
+        }
+      });
+    }
+  });
+});
+
 Parse.Cloud.define("deleteCard", function(request, response) 
 {
   var klpayment = require('cloud/klpayment.js');
@@ -503,7 +527,7 @@ Parse.Cloud.define("buyTickets", function(request, response)
           response.error(JSON.stringify({code: 112, message: "Event sold out"}));
         } else {
           var amount = payValue * price.get("pricePerPerson");
-          klpayment.charge(owner, cardId, amount, function(newCharge, errorMessage){
+          klpayment.charge(owner, cardId, price.get('stripeId'), amount, function(newCharge, errorMessage){
             if (errorMessage) {
               response.error(JSON.stringify({code:111, message: errorMessage}));
             } else {
@@ -571,7 +595,7 @@ Parse.Cloud.define("throwIn", function(request, response)
           console.log("You should pay more for this event");
           response.error(JSON.stringify({code: 112, message: "You should pay more for this event"}));
         } else {
-          klpayment.charge(owner, cardId, payValue, function(newCharge, errorMessage){
+          klpayment.charge(owner, cardId, price.get('stripeId'),  payValue, function(newCharge, errorMessage){
             if (errorMessage) {
               response.error(JSON.stringify({code:111, message: errorMessage}));
             } else {
@@ -695,7 +719,8 @@ Parse.Cloud.afterSave("Activity", function(request) {
       Parse.Push.send({
         where: query,
         data: {
-          alert: messageText
+          alert: messageText,
+          badge: "Increment"
         }
       }, {
         success: function() {
