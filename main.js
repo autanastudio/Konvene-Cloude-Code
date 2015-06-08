@@ -862,7 +862,17 @@ function addActivity(type, from, event, to, photo, callback) {
         oldActivity.set("activityType", type);
         oldActivity.set("from", from);
         oldActivity.set("event", event);
-        oldActivity.set("observers", from.get("followers"));
+        var ownerId = event.get('owner').id;
+        var observers = from.get("followers");
+        var arrayLength = observers.length;
+        var newObservers = new Array();
+        for (var i = 0; i < arrayLength; i++) {
+          var temp = observers[i];
+          if (temp !== ownerId) {
+            newObservers.push(temp);
+          }
+        }
+        oldActivity.set("observers", newObservers);
         oldActivity.save(null, {
           useMasterKey: true,
           success: function() {

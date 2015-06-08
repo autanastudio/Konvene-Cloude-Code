@@ -242,7 +242,7 @@
               'currency':'usd',
               'customer': paymentInfo.get("customerId"),
               // 'destination': destination,
-              // 'application_fee': amountForCharge,
+              // 'application_fee': percent,
             });
 
             Parse.Cloud.httpRequest({
