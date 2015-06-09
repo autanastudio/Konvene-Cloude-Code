@@ -422,6 +422,44 @@ Parse.Cloud.afterSave("Event", function(request) {
   }
 });
 
+Parse.Cloud.afterSave(Parse.User, function(request) {
+  if (request.object.existed() !== false) {
+    var owner = request.object;
+    var query = new Parse.Query(Parse.Object.extend("Event"));
+    query.containedIn("objectId", owner.get("createdEvents"));
+    query.include("price");
+    query.find({
+      success: function(events) {
+        for (var i = 0; i < events.length; i++) { 
+          var event = events[i];
+          var price = event.get("price");
+          var pricingType = price.get('pricingType');
+          if (pricingType === 1 || pricingType === 2) {
+            if (owner.get("stripeId") === "") {
+              event.set("hide", 1);
+              console.log("Hide event");
+            } else {
+              event.set("hide", 0);
+              console.log("Show event");
+            }
+            event.save(null, {
+              useMasterKey: true,
+              success: function() {
+              },
+              error: function(object, error) {
+                console.log("Save event error: "+error.code+" "+error.message);
+              }
+            });
+          }
+        }
+      },
+      error: function(error) {
+        alert("Error: " + error.code + " " + error.message);
+      }
+    });
+  }
+});
+
 Parse.Cloud.afterDelete("Event", function(request) {
   var owner = request.object.get("owner");
   owner.remove("createdEvents", request.object.id);
@@ -513,6 +551,7 @@ Parse.Cloud.define("buyTickets", function(request, response)
   var eventId = request.params.eventId;
   var fetchQuery = new Parse.Query(Parse.Object.extend("Event"));
   fetchQuery.include("price");
+  fetchQuery.include("owner");
   fetchQuery.get(eventId, {
     success: function(eventObject) {
       var price = eventObject.get("price");
@@ -528,7 +567,7 @@ Parse.Cloud.define("buyTickets", function(request, response)
           response.error(JSON.stringify({code: 112, message: "Event sold out"}));
         } else {
           var amount = payValue * price.get("pricePerPerson");
-          klpayment.charge(owner, cardId, price.get('stripeId'), amount, function(newCharge, errorMessage){
+          klpayment.charge(owner, cardId, eventObject.get("owner"), amount, function(newCharge, errorMessage){
             if (errorMessage) {
               response.error(JSON.stringify({code:111, message: errorMessage}));
             } else {
@@ -583,6 +622,7 @@ Parse.Cloud.define("throwIn", function(request, response)
   var eventId = request.params.eventId;
   var fetchQuery = new Parse.Query(Parse.Object.extend("Event"));
   fetchQuery.include("price");
+  fetchQuery.include("owner");
   fetchQuery.get(eventId, {
     success: function(eventObject) {
       var price = eventObject.get("price");
@@ -596,7 +636,7 @@ Parse.Cloud.define("throwIn", function(request, response)
           console.log("You should pay more for this event");
           response.error(JSON.stringify({code: 112, message: "You should pay more for this event"}));
         } else {
-          klpayment.charge(owner, cardId, price.get('stripeId'),  payValue, function(newCharge, errorMessage){
+          klpayment.charge(owner, cardId, eventObject.get("owner"),  payValue, function(newCharge, errorMessage){
             if (errorMessage) {
               response.error(JSON.stringify({code:111, message: errorMessage}));
             } else {
@@ -673,12 +713,17 @@ Parse.Cloud.afterSave("Invite", function(request) {
       messageText = invite.get("from").get("fullName") + " invite you to " + invite.get("event").get("title") + ".";
       console.log(messageText);
 
-      Parse.Push.send({
-        where: query,
-        data: {
+      var body = {
           alert: messageText,
           badge: "Increment"
-        }
+        };
+      var event = invite.get('event');
+      if (event) {
+        body.eventId = event.id;
+      }
+      Parse.Push.send({
+        where: query,
+        data: body
       }, {
         success: function() {
           console.log("Send push successfuly!");
@@ -755,12 +800,17 @@ Parse.Cloud.afterSave("Activity", function(request) {
       }
       console.log(messageText);
 
-      Parse.Push.send({
-        where: query,
-        data: {
+      var body = {
           alert: messageText,
           badge: "Increment"
-        }
+        };
+      var event = activity.get('event');
+      if (event) {
+        body.eventId = event.id;
+      }
+      Parse.Push.send({
+        where: query,
+        data: body
       }, {
         success: function() {
           console.log("Send push successfuly!");

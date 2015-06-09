@@ -196,7 +196,7 @@
     });
   }
 
-  function charge(user, cardId, destination, amount, callBack) {
+  function charge(user, cardId, owner, amount, callBack) {
     getCard(cardId, function(card){
       getPaymentInfo(user, function(paymentInfo){
         changeSource(paymentInfo.get("customerId"), card, function(errorMessage){
@@ -210,7 +210,7 @@
               'amount': amountForCharge,
               'currency':'usd',
               'customer': paymentInfo.get("customerId"),
-              'destination': destination,
+              'destination': owner.get('stripeId'),
               'application_fee': percent,
             });
 
@@ -230,7 +230,22 @@
               error: function(httpResponse) {
                 console.log('Request failed with response code ' + httpResponse.status);
                 var jsonResult = JSON.parse(httpResponse.text);
-                callBack(null, jsonResult.error.message);
+                if (httpResponse.status === 400) {
+                  owner.set('stripeId', '');
+                  owner.save(null, {
+                    useMasterKey: true,
+                    success: function() {
+                      console.log("Save user ok");
+                      callBack(null, jsonResult.error.message);
+                    },
+                    error: function(object, error) {
+                      console.log("Save user error: "+error.code+" "+error.message);
+                      callBack(null, jsonResult.error.message);
+                    }
+                  });
+                } else {
+                  callBack(null, jsonResult.error.message);
+                }
               }
             });
           }
