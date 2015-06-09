@@ -422,6 +422,53 @@ Parse.Cloud.afterSave("Event", function(request) {
   }
 });
 
+
+var Image = require("parse-image");
+Parse.Cloud.beforeSave(Parse.User, function(request, response) {
+  var user = request.object;
+  if (!user.dirty("userImage")) {
+    // The profile photo isn't being modified.
+    response.success();
+    return;
+  }
+  Parse.Cloud.httpRequest({
+    url: user.get("userImage").url()
+  }).then(function(response) {
+    var image = new Image();
+    return image.setData(response.buffer);
+  }).then(function(image) {
+    var size = Math.min(image.width(), image.height());
+    return image.crop({
+      left: (image.width() - size) / 2,
+      top: (image.height() - size) / 2,
+      width: size,
+      height: size
+    });
+
+  }).then(function(image) {
+    return image.scale({
+      width: 64,
+      height: 64
+    });
+
+  }).then(function(image) {
+    return image.setFormat("JPEG");
+  }).then(function(image) {
+    return image.data();
+  }).then(function(buffer) {
+    var base64 = buffer.toString("base64");
+    var cropped = new Parse.File("thumbnail.jpg", { base64: base64 });
+    return cropped.save();
+
+  }).then(function(cropped) {
+    user.set("userImageThumbnail", cropped);
+  }).then(function(result) {
+    response.success();
+  }, function(error) {
+    response.error(error);
+  });
+});
+
 Parse.Cloud.afterSave(Parse.User, function(request) {
   if (request.object.existed() !== false) {
     var owner = request.object;
@@ -437,10 +484,8 @@ Parse.Cloud.afterSave(Parse.User, function(request) {
           if (pricingType === 1 || pricingType === 2) {
             if (owner.get("stripeId") === "") {
               event.set("hide", 1);
-              console.log("Hide event");
             } else {
               event.set("hide", 0);
-              console.log("Show event");
             }
             event.save(null, {
               useMasterKey: true,
