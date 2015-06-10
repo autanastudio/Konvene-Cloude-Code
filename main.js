@@ -835,10 +835,10 @@ Parse.Cloud.afterSave("Activity", function(request) {
             messageText = activity.get("from").get("fullName") + " paid for your event";
             break;
         case activityType.KLActivityTypePhotosAdded:
-            messageText = "Somene add photo to your event.";
+            messageText = activity.get("from").get("fullName") + " add photo to your event.";
             break;
         case activityType.KLActivityTypeCommentAdded:
-            messageText = "Someone add comment to your event.";
+            messageText = activity.get("from").get("fullName") + " add comment to your event.";
             break;
         default:
             break;
