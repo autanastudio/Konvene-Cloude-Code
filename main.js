@@ -390,7 +390,7 @@ var deleteInviteUser = function(event, from, toId, response) {
 };
 
 Parse.Cloud.afterSave("Event", function(request) {
-  if (request.object.existed() === false) {
+  if (request.object.existed() === false && request.object.get('privacy') === 0) {
     var owner = request.object.get("owner");
     owner.addUnique("createdEvents", request.object.id);
     owner.save(null, {
@@ -959,15 +959,17 @@ function addActivity(type, from, event, to, photo, callback) {
         oldActivity.set("event", event);
         var ownerId = event.get('owner').id;
         var observers = from.get("followers");
-        var arrayLength = observers.length;
-        var newObservers = new Array();
-        for (var i = 0; i < arrayLength; i++) {
-          var temp = observers[i];
-          if (temp !== ownerId) {
-            newObservers.push(temp);
+        if (observers) {
+          var arrayLength = observers.length;
+          var newObservers = new Array();
+          for (var i = 0; i < arrayLength; i++) {
+            var temp = observers[i];
+            if (temp !== ownerId) {
+              newObservers.push(temp);
+            }
           }
+          oldActivity.set("observers", newObservers);
         }
-        oldActivity.set("observers", newObservers);
         oldActivity.save(null, {
           useMasterKey: true,
           success: function() {
