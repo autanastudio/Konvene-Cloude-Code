@@ -88,41 +88,17 @@ Parse.Cloud.define("follow", function(request, response) {
               sender.remove("following", following.id);
               following.remove("followers", sender.id);
             }
-
-            sender.save(null, {
-              useMasterKey: true,
-              success: function() {
-                console.log("Sender save ok");
-                following.save(null, {
-                  useMasterKey: true,
-                  success: function() {
-                    console.log("Following save ok");
-
-                    addActivity(activityType.KLActivityTypeFollowMe, sender, null, following, null, function(errorMessage){
-                      if (errorMessage) {
-                        response.error(errorMessage);
-                      } else {
-                        addActivity(activityType.KLActivityTypeFollow, sender, null, following, null, function(errorMessage){
-                          if (errorMessage) {
-                            response.error(errorMessage);
-                          } else {
-                            response.success(sender);
-                          }
-                        });
-                      }
-                    });
-
-                  },
-                  error: function(object, error) {
-                    console.log("Following save error: "+error.code+" "+error.message);
-                    response.error(JSON.stringify({code: 106, message: "User save error"}));
+            addActivity(activityType.KLActivityTypeFollowMe, sender, null, following, null, function(errorMessage){
+              if (errorMessage) {
+                response.error(errorMessage);
+              } else {
+                addActivity(activityType.KLActivityTypeFollow, sender, null, following, null, function(errorMessage){
+                  if (errorMessage) {
+                    response.error(errorMessage);
+                  } else {
+                    response.success(sender);
                   }
-
                 });
-              },
-              error: function(object, error) {
-                console.log("Sender save error: "+error.code+" "+error.message);
-                response.error(JSON.stringify({code: 106, message: "User save error"}));
               }
             });
           }
@@ -390,30 +366,31 @@ var deleteInviteUser = function(event, from, toId, response) {
 };
 
 Parse.Cloud.afterSave("Event", function(request) {
-  if (request.object.existed() === false && request.object.get('privacy') === 0) {
+  if (request.object.existed() === false) {
     var owner = request.object.get("owner");
     owner.addUnique("createdEvents", request.object.id);
     owner.save(null, {
       useMasterKey: true,
       success: function() {
         console.log("Create event ok");
-        var fetchQuery = new Parse.Query(Parse.User);
-        fetchQuery.get(owner.id, {
-          success: function(user) {
-            if (user) {
-              addActivity(activityType.KLActivityTypeCreateEvent, user, request.object, null, null, function(errorMessage){
-                if (errorMessage) {
-                  console.log(errorMessage);
-                }
-              });
-            }
-          },
-          error: function(object, error) {
-            console.log("error: "+error.code+" "+error.message);
-            callBack();
-          } 
-        });
-
+        if (request.object.get('privacy') === 0) {
+          var fetchQuery = new Parse.Query(Parse.User);
+          fetchQuery.get(owner.id, {
+            success: function(user) {
+              if (user) {
+                addActivity(activityType.KLActivityTypeCreateEvent, user, request.object, null, null, function(errorMessage){
+                  if (errorMessage) {
+                    console.log(errorMessage);
+                  }
+                });
+              }
+            },
+            error: function(object, error) {
+              console.log("error: "+error.code+" "+error.message);
+              callBack();
+            } 
+          });
+        }
       },
       error: function(object, error) {
         console.log("Create event error: "+error.code+" "+error.message);
