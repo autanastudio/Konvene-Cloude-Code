@@ -829,7 +829,9 @@ Parse.Cloud.afterSave("Activity", function(request) {
       var event = activity.get('event');
       if (event) {
         body.eventId = event.id;
-      } else if (activity.get("activityType") === activityType.KLActivityTypeFollowMe || activity.get("activityType") === activityType.KLActivityTypeFollow) {
+      } else if (activity.get("activityType") === activityType.KLActivityTypeFollowMe) {
+        body.userId = lastUser.id;
+      } else if (activity.get("activityType") === activityType.KLActivityTypeFollow) {
         body.userId = activity.get("from").id;
       }
       Parse.Push.send({
