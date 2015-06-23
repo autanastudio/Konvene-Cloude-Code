@@ -894,11 +894,13 @@ Parse.Cloud.afterSave("Activity", function(request) {
 });
 
 function addActivity(type, from, event, to, photo, callback) {
+  var moment = require('cloud/moment')
   switch (type) {
     case activityType.KLActivityTypeFollowMe:
         var query = new Parse.Query(Activity);
         query.equalTo("activityType", type);
         query.equalTo("observers", to.id);
+        query.greaterThan("createdAt", moment().subtract(1, 'd').toDate());
         query.first({
           success: function (oldActivity) {
             if (!oldActivity) {
@@ -910,7 +912,6 @@ function addActivity(type, from, event, to, photo, callback) {
             oldActivity.save(null, {
               useMasterKey: true,
               success: function() {
-                console.log("Activity save ok");
                 callback(null);
               },
               error: function(object, error) {
@@ -928,9 +929,9 @@ function addActivity(type, from, event, to, photo, callback) {
         var query = new Parse.Query(Activity);
         query.equalTo("activityType", type);
         query.equalTo("from", from);
+        query.greaterThan("createdAt", moment().subtract(1, 'd').toDate());
         query.first({
           success: function (oldActivity) {
-            console.log(oldActivity);
             if (!oldActivity) {
               oldActivity = new Activity();
               oldActivity.set("activityType", type);
@@ -941,7 +942,6 @@ function addActivity(type, from, event, to, photo, callback) {
             oldActivity.save(null, {
               useMasterKey: true,
               success: function() {
-                console.log("Activity save ok");
                 callback(null);
               },
               error: function(object, error) {
@@ -964,7 +964,6 @@ function addActivity(type, from, event, to, photo, callback) {
         oldActivity.save(null, {
           useMasterKey: true,
           success: function() {
-            console.log("Activity save ok");
             callback(null);
           },
           error: function(object, error) {
@@ -994,7 +993,6 @@ function addActivity(type, from, event, to, photo, callback) {
         oldActivity.save(null, {
           useMasterKey: true,
           success: function() {
-            console.log("Activity save ok");
             callback(null);
           },
           error: function(object, error) {
@@ -1008,6 +1006,7 @@ function addActivity(type, from, event, to, photo, callback) {
         query.equalTo("activityType", type);
         query.equalTo("observers", to.id);
         query.equalTo("event", event);
+        query.greaterThan("createdAt", moment().subtract(1, 'd').toDate());
         query.first({
           success: function (oldActivity) {
             if (!oldActivity) {
@@ -1020,7 +1019,6 @@ function addActivity(type, from, event, to, photo, callback) {
             oldActivity.save(null, {
               useMasterKey: true,
               success: function() {
-                console.log("Activity save ok");
                 callback(null);
               },
               error: function(object, error) {
@@ -1051,7 +1049,6 @@ function addActivity(type, from, event, to, photo, callback) {
         oldActivity.save(null, {
           useMasterKey: true,
           success: function() {
-            console.log("Activity save ok");
             callback(null);
           },
           error: function(object, error) {
@@ -1069,7 +1066,6 @@ function addActivity(type, from, event, to, photo, callback) {
         oldActivity.save(null, {
           useMasterKey: true,
           success: function() {
-            console.log("Activity save ok");
             callback(null);
           },
           error: function(object, error) {
@@ -1079,7 +1075,6 @@ function addActivity(type, from, event, to, photo, callback) {
         });
         break;
     default:
-        console.log("Unknown activity type");
         callback(JSON.stringify({code: 101, message: "Unknown activity type"}));
         break;
   }
