@@ -259,29 +259,17 @@ Parse.Cloud.define("attend", function(request, response) {
           });
         } else {
           eventObject.addUnique("attendees", sender.id);
-          eventObject.save(null, {
-            useMasterKey: true,
-            success: function() {
-              console.log("Event save ok");
-
-              addActivity(activityType.KLActivityTypeGoesToMyEvent, sender, eventObject, eventObject.get("owner"), null, function(errorMessage){
+          addActivity(activityType.KLActivityTypeGoesToMyEvent, sender, eventObject, eventObject.get("owner"), null, function(errorMessage){
+            if (errorMessage) {
+              response.error(errorMessage);
+            } else {
+              addActivity(activityType.KLActivityTypeGoesToEvent, sender, eventObject, null, null, function(errorMessage){
                 if (errorMessage) {
                   response.error(errorMessage);
                 } else {
-                  addActivity(activityType.KLActivityTypeGoesToEvent, sender, eventObject, null, null, function(errorMessage){
-                    if (errorMessage) {
-                      response.error(errorMessage);
-                    } else {
-                      response.success(eventObject);
-                    }
-                  });
+                  response.success(eventObject);
                 }
               });
-
-            },
-            error: function(object, error) {
-              console.log("Event save error: "+error.code+" "+error.message);
-              response.error(JSON.stringify({code: 106, message: "Event save error"}));
             }
           });
         }
@@ -826,7 +814,7 @@ Parse.Cloud.afterSave("Activity", function(request) {
             messageText = lastUser.get("fullName") + " goes to your event.";
             break;
         case activityType.KLActivityTypeEventCanceled:
-            messageText = "Event " + activity.get("event").get("title") + " has been canceled.";
+            messageText = "Event " + activity.get("deletedEventTitle") + " has been canceled.";
             break;
         case activityType.KLActivityTypeEventChangedName:
         case activityType.KLActivityTypeEventChangedTime:
@@ -845,7 +833,34 @@ Parse.Cloud.afterSave("Activity", function(request) {
         default:
             break;
       }
-      console.log(messageText);
+
+      if (activity.get("activityType") === activityType.KLActivityTypeGoesToEvent) {
+        var endQuery = new Parse.Query(Parse.Installation);
+        endQuery.equalTo("user", activity.get("from").id);
+
+        var event = activity.get('event');
+        var body = {
+            alert: "\"" +event.get("title") + "\" has ended, tell us about your experience",
+            badge: "Increment"
+          };
+        console.log(body);
+        if (event) {
+          body.eventId = event.id;
+        }
+        Parse.Push.send({
+          where: endQuery,
+          data: body,
+          push_time: event.get("endDate")
+        }, {
+          success: function() {
+            console.log("Send end event push successfuly!");
+          },
+          error: function(error) {
+            console.log("End event push notification error");
+            console.log(error);
+          }
+        });
+      }
 
       var body = {
           alert: messageText,
@@ -1023,7 +1038,7 @@ function addActivity(type, from, event, to, photo, callback) {
         oldActivity = new Activity();
         oldActivity.set("activityType", type);
         oldActivity.set("from", from);
-        oldActivity.set("event", event);
+        oldActivity.set("deletedEventTitle", event.get("title"));
         var attendees = event.get("attendees");
         var savers = event.get("savers");
         if (attendees && savers) {
