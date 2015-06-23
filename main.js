@@ -501,6 +501,31 @@ Parse.Cloud.afterDelete("Event", function(request) {
   });
 });
 
+Parse.Cloud.afterDelete(Parse.User, function(request) {
+  Parse.Cloud.useMasterKey();
+  var user = request.object;
+  var followersQuery = new Parse.Query(Parse.User);
+  followersQuery.equalTo("followers", user.id);
+  followersQuery.each(function(follower) {
+    follower.remove("followers", user.id);
+    return follower.save();
+  }).then(function() {
+    console.log("Remove user " + user.get("fullName") + (" from followers list"));
+  }, function(error) {
+    console.log(error);
+  });
+  var followingQuery = new Parse.Query(Parse.User);
+  followingQuery.equalTo("following", user.id);
+  followingQuery.each(function(follower) {
+    follower.remove("following", user.id);
+    return follower.save();
+  }).then(function() {
+    console.log("Remove user " + user.get("fullName") + (" from following list"));
+  }, function(error) {
+    console.log(error);
+  });
+});
+
 Parse.Cloud.define("addCard", function(request, response) 
 {
   var klpayment = require('cloud/klpayment.js');
@@ -1044,6 +1069,61 @@ function addActivity(type, from, event, to, photo, callback) {
         break;
   }
 }
+
+Parse.Cloud.job("deleteNullEventsFromList", function(request, status) {
+
+  Parse.Cloud.useMasterKey();
+  var query = new Parse.Query(Parse.User);
+  query.each(function(user) {
+      var createdIds = user.get("createdEvents");
+      if (createdIds !== undefined && createdIds.length > 0) {
+        var eventQuery = new Parse.Query(Parse.Object.extend("Event"));
+        eventQuery.containedIn("objectId", createdIds);
+        return eventQuery.find().then(function (events) {
+          var createdEventsArray = new Array();
+          for(i = 0; i<events.length; i++) {
+            var tempEvent = events[i];
+            createdEventsArray.push(tempEvent.id);
+          }
+          user.set("createdEvents", createdEventsArray);
+          return user.save();
+        });
+      }
+  }).then(function() {
+    // Set the job's success status
+    status.success("Update events successfully.");
+  }, function(error) {
+    // Set the job's error status
+    status.error("Uh oh, something went wrong.");
+  });
+});
+
+Parse.Cloud.job("deleteNullUserFromList", function(request, status) {
+  Parse.Cloud.useMasterKey();
+  var query = new Parse.Query(Parse.User);
+  query.each(function(user) {
+      var ids = user.get("followers");
+      if (ids !== undefined && ids.length > 0) {
+        var userQuery = new Parse.Query(Parse.User);
+        userQuery.containedIn("objectId", ids);
+        return userQuery.find().then(function (users) {
+          var usersArray = new Array();
+          for(i = 0; i<users.length; i++) {
+            var tempUser = users[i];
+            usersArray.push(tempUser.id);
+          }
+          user.set("followers", usersArray);
+          return user.save();
+        });
+      }
+  }).then(function() {
+    // Set the job's success status
+    status.success("Update events successfully.");
+  }, function(error) {
+    // Set the job's error status
+    status.error("Uh oh, something went wrong.");
+  });
+});
 
 var indexOf = function(needle) {
   if(typeof Array.prototype.indexOf === 'function') {
