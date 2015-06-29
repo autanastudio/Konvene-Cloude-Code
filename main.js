@@ -263,13 +263,17 @@ Parse.Cloud.define("attend", function(request, response) {
             if (errorMessage) {
               response.error(errorMessage);
             } else {
-              addActivity(activityType.KLActivityTypeGoesToEvent, sender, eventObject, null, null, function(errorMessage){
-                if (errorMessage) {
-                  response.error(errorMessage);
-                } else {
-                  response.success(eventObject);
-                }
-              });
+              if (eventObject.get('privacy') === 0) {
+                addActivity(activityType.KLActivityTypeGoesToEvent, sender, eventObject, null, null, function(errorMessage){
+                  if (errorMessage) {
+                    response.error(errorMessage);
+                  } else {
+                    response.success(eventObject);
+                  }
+                });
+              } else {
+                response.success(eventObject);
+              }
             }
           });
         }
