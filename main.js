@@ -828,7 +828,7 @@ Parse.Cloud.afterSave("Activity", function(request) {
             messageText = activity.get("from").get("fullName") + " add photo to your event.";
             break;
         case activityType.KLActivityTypeCommentAdded:
-            messageText = activity.get("from").get("fullName") + " add comment to your event.";
+            messageText = activity.get("from").get("fullName") + " commented " + activity.get("event").get("title") + ".";
             break;
         default:
             break;
