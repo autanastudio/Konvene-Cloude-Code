@@ -242,6 +242,7 @@ Parse.Cloud.define("attend", function(request, response) {
       var price = eventObject.get("price");
       var pricingType = price.get('pricingType');
       var minimumAmount = price.get('minimumAmount');
+      var privacy = eventObject.get('privacy');
       console.log("Min " + minimumAmount + " type " + pricingType);
       if (pricingType === 0 || (pricingType===2 && minimumAmount === 0)) {
         if (indexOf.call(eventObject.get("attendees"), sender.id) !== -1) {
@@ -263,7 +264,7 @@ Parse.Cloud.define("attend", function(request, response) {
             if (errorMessage) {
               response.error(errorMessage);
             } else {
-              if (eventObject.get('privacy') === 0) {
+              if (privacy === 0) {
                 addActivity(activityType.KLActivityTypeGoesToEvent, sender, eventObject, null, null, function(errorMessage){
                   if (errorMessage) {
                     response.error(errorMessage);
