@@ -260,21 +260,30 @@ Parse.Cloud.define("attend", function(request, response) {
           });
         } else {
           eventObject.addUnique("attendees", sender.id);
-          addActivity(activityType.KLActivityTypeGoesToMyEvent, sender, eventObject, eventObject.get("owner"), null, function(errorMessage){
-            if (errorMessage) {
-              response.error(errorMessage);
-            } else {
-              if (privacy === 0) {
-                addActivity(activityType.KLActivityTypeGoesToEvent, sender, eventObject, null, null, function(errorMessage){
-                  if (errorMessage) {
-                    response.error(errorMessage);
+          eventObject.save(null, {
+            useMasterKey: true,
+            success: function() {
+              addActivity(activityType.KLActivityTypeGoesToMyEvent, sender, eventObject, eventObject.get("owner"), null, function(errorMessage){
+                if (errorMessage) {
+                  response.error(errorMessage);
+                } else {
+                  if (privacy === 0) {
+                    addActivity(activityType.KLActivityTypeGoesToEvent, sender, eventObject, null, null, function(errorMessage){
+                      if (errorMessage) {
+                        response.error(errorMessage);
+                      } else {
+                        response.success(eventObject);
+                      }
+                    });
                   } else {
                     response.success(eventObject);
                   }
-                });
-              } else {
-                response.success(eventObject);
-              }
+                }
+              });
+            },
+            error: function(object, error) {
+              console.log("Event save error: "+error.code+" "+error.message);
+              response.error(JSON.stringify({code: 106, message: "Event save error"}));
             }
           });
         }
