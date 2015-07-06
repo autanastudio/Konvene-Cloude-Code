@@ -759,7 +759,7 @@ Parse.Cloud.afterSave("Invite", function(request) {
 
       query.equalTo("user", invite.get("to").id);
 
-      messageText = invite.get("from").get("fullName") + " invite you to " + invite.get("event").get("title") + ".";
+      messageText = invite.get("from").get("fullName") + " invited you to " + invite.get("event").get("title") + ".";
       console.log(messageText);
 
       var body = {
@@ -822,10 +822,10 @@ Parse.Cloud.afterSave("Activity", function(request) {
             messageText = activity.get("from").get("fullName") + " created event.";
             break;
         case activityType.KLActivityTypeGoesToEvent:
-            messageText = activity.get("from").get("fullName") + " goes to the event.";
+            messageText = activity.get("from").get("fullName") + " is going to " + activity.get("event").get("title") + ".";
             break;
         case activityType.KLActivityTypeGoesToMyEvent:
-            messageText = lastUser.get("fullName") + " goes to your event.";
+            messageText = lastUser.get("fullName") + " is going to your event.";
             break;
         case activityType.KLActivityTypeEventCanceled:
             messageText = "Event " + activity.get("deletedEventTitle") + " has been canceled.";
