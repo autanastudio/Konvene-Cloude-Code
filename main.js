@@ -84,23 +84,31 @@ Parse.Cloud.define("follow", function(request, response) {
             if (isFollow) {
               sender.addUnique("following", following.id);
               following.addUnique("followers", sender.id);
+              addActivity(activityType.KLActivityTypeFollowMe, sender, null, following, null, function(errorMessage){
+                if (errorMessage) {
+                  response.error(errorMessage);
+                } else {
+                  addActivity(activityType.KLActivityTypeFollow, sender, null, following, null, function(errorMessage){
+                    if (errorMessage) {
+                      response.error(errorMessage);
+                    } else {
+                      response.success(sender);
+                    }
+                  });
+                }
+              });
             } else {
+              Parse.Cloud.useMasterKey();
               sender.remove("following", following.id);
               following.remove("followers", sender.id);
+              sender.save ().then(function(user) {
+                return following.save();
+              }).then(function(result) {
+                response.success(sender);
+              }, function(error) {
+                response.error(error);
+              });
             }
-            addActivity(activityType.KLActivityTypeFollowMe, sender, null, following, null, function(errorMessage){
-              if (errorMessage) {
-                response.error(errorMessage);
-              } else {
-                addActivity(activityType.KLActivityTypeFollow, sender, null, following, null, function(errorMessage){
-                  if (errorMessage) {
-                    response.error(errorMessage);
-                  } else {
-                    response.success(sender);
-                  }
-                });
-              }
-            });
           }
         },
         error: function(object, error) {
@@ -951,7 +959,18 @@ function addActivity(type, from, event, to, photo, callback) {
               oldActivity.set("activityType", type);
               oldActivity.set("from", from);
             }
-            oldActivity.set("observers", from.get("followers"));
+            var observers = from.get("followers");
+            if (observers) {
+              var arrayLength = observers.length;
+              var newObservers = new Array();
+              for (var i = 0; i < arrayLength; i++) {
+                var temp = observers[i];
+                if (temp !== to.id) {
+                  newObservers.push(temp);
+                }
+              }
+              oldActivity.set("observers", newObservers);
+            }
             oldActivity.addUnique("users", to);
             oldActivity.save(null, {
               useMasterKey: true,
