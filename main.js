@@ -1,3 +1,4 @@
+var errors = require('cloud/errors.js');
 var Invite = Parse.Object.extend("Invite");
 var EventExtension = Parse.Object.extend("EventExtension");
 var Activity = Parse.Object.extend("Activity");
@@ -6,20 +7,12 @@ Parse.Cloud.define("authorize", function(request, response) {
   var klauth = require('cloud/klauth.js');
   var phoneNumber = request.params.phoneNumber;
   var verificationCode = request.params.verificationCode;
-  klauth.getUserWithCode(phoneNumber, verificationCode, function(user, errJSON){
-    if (user) {
-      Parse.Cloud.useMasterKey();
-      user.fetch({
-        success: function (user) {
-          response.success(user._sessionToken);
-        },
-        error: function (user, err) {
-          response.error(err.message);
-        }
-      });
-    } else {
-      response.error(errJSON);
-    }
+  klauth.getUserWithCode(phoneNumber, verificationCode).then(function (user) {
+    return user.fetch({useMasterKey : true});
+  }).then(function (user) {
+    response.success(user._sessionToken);
+  },function (error) {
+    response.error(error);
   });
 });
   
@@ -28,6 +21,8 @@ Parse.Cloud.define("requestCode", function(request, response) {
   var phoneNumber = request.params.phoneNumber;
   klauth.requireCode(phoneNumber).then(function() {
     response.success();
+  }, function (error) {
+    response.error(error);
   });
 });
 
@@ -1116,7 +1111,6 @@ function addActivity(type, from, event, to, photo, callback) {
 }
 
 Parse.Cloud.job("deleteNullEventsFromList", function(request, status) {
-
   Parse.Cloud.useMasterKey();
   var query = new Parse.Query(Parse.User);
   query.each(function(user) {
