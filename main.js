@@ -3,7 +3,7 @@ var Invite = Parse.Object.extend("Invite");
 var EventExtension = Parse.Object.extend("EventExtension");
 var Activity = Parse.Object.extend("Activity");
 
-Parse.Cloud.define("authorize", function(request, response) {
+Parse.Cloud.define("authorize", function (request, response) {
   var klauth = require('cloud/klauth.js');
   var phoneNumber = request.params.phoneNumber;
   var verificationCode = request.params.verificationCode;
