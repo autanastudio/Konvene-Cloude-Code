@@ -751,7 +751,8 @@ var activityType = {
     KLActivityTypeEventChangedTime :      8,
     KLActivityTypePhotosAdded :           9,
     KLActivityTypeCommentAdded :          10,
-    KLActivityTypePayForEvent :           11
+    KLActivityTypePayForEvent :           11,
+    KLActivityTypeCommentAddedToAttendedEvent : 12,
 }
 
 Parse.Cloud.afterSave("Invite", function(request) {
@@ -850,6 +851,7 @@ Parse.Cloud.afterSave("Activity", function(request) {
             messageText = activity.get("from").get("fullName") + " add photo to your event.";
             break;
         case activityType.KLActivityTypeCommentAdded:
+        case activityType.KLActivityTypeCommentAddedToAttendedEvent:
             messageText = activity.get("from").get("fullName") + " commented " + activity.get("event").get("title") + ".";
             break;
         default:

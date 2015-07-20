@@ -204,15 +204,17 @@
             callBack(null, errorMessage);
           } else {
             var querystring = require('querystring');
-            var amountForCharge = amount*100;
-            var userCharge = amountForCharge*0.029 + 0.3;
-            var percent =  (amountForCharge - userCharge)*0.02;
+            var amountForCharge = amount * 100;
+            var userCharge = amountForCharge * 0.029 + 30;
+            var percent =  (amountForCharge - userCharge) * 0.02;
+            var intFee = Math.ceil(percent+userCharge);
+            console.log ("Fee " + intFee);
             var body = querystring.stringify({
               'amount': amountForCharge,
               'currency':'usd',
               'customer': paymentInfo.get("customerId"),
               'destination': owner.get('stripeId'),
-              'application_fee': percent+userCharge,
+              'application_fee': intFee,
             });
 
             Parse.Cloud.httpRequest({
