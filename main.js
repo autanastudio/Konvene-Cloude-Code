@@ -1,10 +1,11 @@
 var errors = require('cloud/errors.js');
+var klauth = require('cloud/klauth.js');
+var social = require('cloud/social.js');
 var Invite = Parse.Object.extend("Invite");
 var EventExtension = Parse.Object.extend("EventExtension");
 var Activity = Parse.Object.extend("Activity");
 
 Parse.Cloud.define("authorize", function (request, response) {
-  var klauth = require('cloud/klauth.js');
   var phoneNumber = request.params.phoneNumber;
   var verificationCode = request.params.verificationCode;
   klauth.getUserWithCode(phoneNumber, verificationCode).then(function (user) {
@@ -17,7 +18,6 @@ Parse.Cloud.define("authorize", function (request, response) {
 });
   
 Parse.Cloud.define("requestCode", function(request, response) {
-  var klauth = require("cloud/klauth.js");
   var phoneNumber = request.params.phoneNumber;
   klauth.requireCode(phoneNumber).then(function() {
     response.success();
@@ -26,6 +26,7 @@ Parse.Cloud.define("requestCode", function(request, response) {
   });
 });
 
+//Old function for old versions
 Parse.Cloud.define("checkUsersFromContacts", function(request, response) {
   var phonesArray = request.params.phonesArray;
   var query = new Parse.Query(Parse.User);
@@ -47,12 +48,11 @@ Parse.Cloud.define("deleteUser", function(request, response) {
   sender.save(null, {
     useMasterKey: true,
     success: function() {
-      console.log("Delete user ok");
       response.success(sender);
     },
     error: function(object, error) {
       console.log("Save user error: "+error.code+" "+error.message);
-      response.error(JSON.stringify({code: 101, message: "Error while deleting!"}));
+      response.error(errors.errorDeleteUser);
     }
   });
 });
@@ -61,61 +61,11 @@ Parse.Cloud.define("follow", function(request, response) {
   var sender = request.user;
   var followingId = request.params.followingId;
   var isFollow = request.params.isFollow;
-  if (sender.id === followingId) {
-    response.error(JSON.stringify({code: 105, message: "You cannot follow yourself!"}));
-  }
-  var fetchQuery = new Parse.Query(Parse.User);
-  fetchQuery.get(followingId, {
-    success: function(following) {
-      var query = new Parse.Query(Parse.User);
-      query.equalTo("following", following);
-      query.equalTo("id", sender.id);
-
-      query.first({
-        success: function(user) {
-          if(user) {
-            response.error(JSON.stringify({code: 108, message: "You alredy follows this user"}));
-          } else {
-            if (isFollow) {
-              sender.addUnique("following", following.id);
-              following.addUnique("followers", sender.id);
-              addActivity(activityType.KLActivityTypeFollowMe, sender, null, following, null, function(errorMessage){
-                if (errorMessage) {
-                  response.error(errorMessage);
-                } else {
-                  addActivity(activityType.KLActivityTypeFollow, sender, null, following, null, function(errorMessage){
-                    if (errorMessage) {
-                      response.error(errorMessage);
-                    } else {
-                      response.success(sender);
-                    }
-                  });
-                }
-              });
-            } else {
-              Parse.Cloud.useMasterKey();
-              sender.remove("following", following.id);
-              following.remove("followers", sender.id);
-              sender.save ().then(function(user) {
-                return following.save();
-              }).then(function(result) {
-                response.success(sender);
-              }, function(error) {
-                response.error(error);
-              });
-            }
-          }
-        },
-        error: function(object, error) {
-          console.log("error: "+error.code+" "+error.message);
-          response.error(JSON.stringify({code: 107, message: "Follow search error", error: error}));
-        }
-      });
-    },
-    error: function(object, error) {
-          console.log("error: "+error.code+" "+error.message);
-          response.error(JSON.stringify({code: 109, message: "Fetch user error", error: error}));
-    } 
+  social.follow(sender, followingId, isFollow).then(function () {
+    response.success(sender);
+  },
+  function (error) {
+    response.error(errors.errorFollowUserError);
   });
 });
 
