@@ -2,6 +2,7 @@ var errors = require('cloud/errors.js');
 var klauth = require('cloud/klauth.js');
 var social = require('cloud/social.js');
 var events = require('cloud/events.js');
+var background = require('cloud/background.js');
 var Image = require("parse-image");
 var activity = require('cloud/activity.js');
 
@@ -397,21 +398,18 @@ Parse.Cloud.afterSave(Parse.User, function(request) {
 });
 
 Parse.Cloud.afterDelete("Event", function(request) {
-  var owner = request.object.get("owner");
-  owner.remove("createdEvents", request.object.id);
-  owner.save(null, {
-    useMasterKey: true,
-    success: function() {
-      console.log("Remove event ok");
-      addActivity(activityType.KLActivityTypeEventCanceled, owner, request.object, null, null, function(errorMessage){
-          if (errorMessage) {
-            console.log(errorMessage);
-          }
-      });
-    },
-    error: function(object, error) {
-      console.log("Remove event error: "+error.code+" "+error.message);
-    }
+  var event = request.object;
+  var owner = event.get("owner");
+  var job = {
+    name: "cleanEventData",
+    body: {eventId: request.object.id},
+  };
+  background.callBackgroundJob(job).then( function () {
+    return activity.addActivity(activityType.KLActivityTypeEventCanceled, owner, null, event);
+  }).then( function () {
+  },
+  function (error) {
+    console.log(error);
   });
 });
 
@@ -610,29 +608,11 @@ Parse.Cloud.afterSave("Activity", function(request) {
 //---
 //---
 
-Parse.Cloud.job("deleteNullEventsFromList", function(request, status) {
-  Parse.Cloud.useMasterKey();
-  var query = new Parse.Query(Parse.User);
-  query.each(function(user) {
-      var createdIds = user.get("createdEvents");
-      if (createdIds !== undefined && createdIds.length > 0) {
-        var eventQuery = new Parse.Query(Parse.Object.extend("Event"));
-        eventQuery.containedIn("objectId", createdIds);
-        return eventQuery.find().then(function (events) {
-          var createdEventsArray = new Array();
-          for(i = 0; i<events.length; i++) {
-            var tempEvent = events[i];
-            createdEventsArray.push(tempEvent.id);
-          }
-          user.set("createdEvents", createdEventsArray);
-          return user.save();
-        });
-      }
-  }).then(function() {
-    // Set the job's success status
+Parse.Cloud.job("cleanEventData", function(request, status) {
+  background.cleanEventData(request.params.eventId).then(function() {
     status.success("Update events successfully.");
   }, function(error) {
-    // Set the job's error status
+    console.log(error);
     status.error("Uh oh, something went wrong.");
   });
 });
