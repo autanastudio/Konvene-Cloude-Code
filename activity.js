@@ -4,18 +4,18 @@ var errors = require('cloud/errors.js');
 var Activity = Parse.Object.extend("Activity");
 
 var activityType = {
-  KLActivityTypeFollowMe :                    0,
-  KLActivityTypeFollow :                      1,
-  KLActivityTypeCreateEvent :                 2,
-  KLActivityTypeGoesToEvent :                 3,
-  KLActivityTypeGoesToMyEvent :               4,
-  KLActivityTypeEventCanceled :               5,
-  KLActivityTypeEventChangedName :            6,
-  KLActivityTypeEventChangedLocation :        7,
-  KLActivityTypeEventChangedTime :            8,
-  KLActivityTypePhotosAdded :                 9,
-  KLActivityTypeCommentAdded :                10,
-  KLActivityTypePayForEvent :                 11,
+  KLActivityTypeFollowMe : 0,
+  KLActivityTypeFollow : 1,
+  KLActivityTypeCreateEvent : 2,
+  KLActivityTypeGoesToEvent : 3,
+  KLActivityTypeGoesToMyEvent : 4,
+  KLActivityTypeEventCanceled : 5,
+  KLActivityTypeEventChangedName : 6,
+  KLActivityTypeEventChangedLocation : 7,
+  KLActivityTypeEventChangedTime : 8,
+  KLActivityTypePhotosAdded : 9,
+  KLActivityTypeCommentAdded : 10,
+  KLActivityTypePayForEvent : 11,
   KLActivityTypeCommentAddedToAttendedEvent : 12,
 }
 
@@ -100,9 +100,10 @@ var updateObservers = function (activity, activityController) {
       }
     break;
     case activityType.KLActivityTypeCreateEvent:
-      oldActivity.set("observers", activityController.from.get("followers"));
+      activity.set("observers", activityController.from.get("followers"));
     break;
     case activityType.KLActivityTypeGoesToEvent:
+      var observers = activityController.from.get("followers");
       var ownerId = activityController.event.get('owner').id;
       if (observers) {
         var index = observers.indexOf(ownerId);
@@ -140,7 +141,7 @@ var buildGroupedActivityQuery = function (activityController) {
     query.equalTo("observers", activityController.to.id);
     query.equalTo("event", activityController.event); 
   } else {
-    //Returm query null if it isn't grouped
+    //Return query null if it isn't grouped
     return null;
   }
   return query;

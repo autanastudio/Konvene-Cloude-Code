@@ -1,9 +1,22 @@
 var errors = require('cloud/errors.js');
 var klauth = require('cloud/klauth.js');
 var social = require('cloud/social.js');
+var events = require('cloud/events.js');
+var Image = require("parse-image");
+var activity = require('cloud/activity.js');
+
+var activityType = activity.activityType;
 var Invite = Parse.Object.extend("Invite");
 var EventExtension = Parse.Object.extend("EventExtension");
 var Activity = Parse.Object.extend("Activity");
+
+//---
+//---
+//---
+//!!! Cloud functions
+//---
+//---
+//---
 
 Parse.Cloud.define("authorize", function (request, response) {
   var phoneNumber = request.params.phoneNumber;
@@ -23,22 +36,6 @@ Parse.Cloud.define("requestCode", function(request, response) {
     response.success();
   }, function (error) {
     response.error(error);
-  });
-});
-
-//Old function for old versions
-Parse.Cloud.define("checkUsersFromContacts", function(request, response) {
-  var phonesArray = request.params.phonesArray;
-  var query = new Parse.Query(Parse.User);
-  query.containedIn("phoneNumber", phonesArray);
-  query.equalTo("isRegistered", true);
-  query.find({
-    success: function (usersArray) {
-      response.success(usersArray);
-    },
-    error: function (error) {
-      response.error(err.message);
-    }
   });
 });
 
@@ -73,64 +70,11 @@ Parse.Cloud.define("vote", function(request, response) {
   var sender = request.user;
   var value = request.params.voteValue;
   var eventId = request.params.eventId;
-  var fetchQuery = new Parse.Query(Parse.Object.extend("Event"));
-  fetchQuery.include("extension");
-  fetchQuery.get(eventId, {
-    success: function(eventObject) {
-      var owner = eventObject.get("owner");
-      var extension = eventObject.get("extension");
-      if (owner.id === sender.id) {
-        response.error(JSON.stringify({code: 110, message: "You cant vote for your event!"}));
-      } else if (extension &&  indexOf.call(extension.get("voters"), sender.id) !== -1) {
-        response.error(JSON.stringify({code: 108, message: "You alredy vote for event!"}));
-      } else {
-        var weight = [-2, -1, 0, 1, 2];
-        if (!extension) {
-          extension = new EventExtension();
-          eventObject.set("extension", extension);
-        }
-        extension.addUnique("voters", sender.id);
-        var raiting = extension.get("raiting");
-        if (raiting) {
-          raiting = raiting + weight[value];
-        } else {
-          raiting = weight[value];
-        }
-        extension.set("raiting", raiting);
-        eventObject.save(null, {
-          useMasterKey: true,
-          success: function() {
-            console.log("Event save ok");
-            raiting = owner.get("raiting");
-            if (raiting) {
-              raiting = raiting + weight[value];
-            } else {
-              raiting = weight[value];
-            }
-            owner.set("raiting", raiting);
-            owner.save(null, {
-              useMasterKey: true,
-              success: function() {
-                console.log("Save event ok");
-                response.success(eventObject);
-              },
-              error: function(object, error) {
-                console.log("Save event error: "+error.code+" "+error.message);
-                response.error(JSON.stringify({code: 106, message: "Event save error"}));
-              }
-            });
-          },
-          error: function(object, error) {
-            console.log("EventExtension save error: "+error.code+" "+error.message);
-            response.error(JSON.stringify({code: 106, message: "EventExtension save error"}));
-          }
-        });
-      }
-    },
-    error: function(object, error) {
-      console.log("error: "+error.code+" "+error.message);
-      response.error(JSON.stringify({code: 109, message: "Event fetch error", error: error}));
-    } 
+  events.vote(sender, value, eventId).then(function (event) {
+    response.success(event);
+  },
+  function (error) {
+    response.error(error);
   });
 });
 
@@ -139,43 +83,147 @@ Parse.Cloud.define("invite", function(request, response) {
   var invitedId = request.params.invitedId;
   var eventId = request.params.eventId;
   var isInvite = request.params.isInvite;
-  if (isInvite === undefined) {
-    isInvite = 1;
-  }
-  if (sender.id === invitedId) {
-    response.error(JSON.stringify({code: 105, message: "You cannot invite yourself!"}));
-  }
+  events.invite(sender, invitedId, eventId, isInvite).then(function (event) {
+    response.success(event);
+  },
+  function (error) {
+    response.error(error);
+  });
+});
+
+Parse.Cloud.define("attend", function(request, response) {
+  var sender = request.user;
+  var eventId = request.params.eventId;
+  events.attend(sender, eventId).then(function (event) {
+    response.success(event);
+  },
+  function (error) {
+    response.error(error);
+  });
+});
+
+//TODO rewrite old code
+Parse.Cloud.define("addCard", function(request, response) 
+{
+  var klpayment = require('cloud/klpayment.js');
+  var owner = request.user;
+  var source = request.params.token;
+  klpayment.addCard(owner, source, function(paymentInfo, errorMessage){
+    if (errorMessage) {
+      response.error(JSON.stringify({code:111, message: errorMessage}));
+    } else {
+      owner.set("paymentInfo", paymentInfo);
+      owner.save(null, {
+        useMasterKey: true,
+        success: function() {
+          console.log("Save payment info ok");
+          response.success(paymentInfo);
+        },
+        error: function(object, error) {
+          console.log("Save payment info error: "+error.code+" "+error.message);
+          response.error(JSON.stringify({code: 106, message: "PaymentInfo save error"}));
+        }
+      });
+    }
+  });
+});
+
+Parse.Cloud.define("authStripeConnect", function(request, response) 
+{
+  var klpayment = require('cloud/klpayment.js');
+  var owner = request.user;
+  var code = request.params.code;
+  klpayment.authorizeWithStripeConnect(owner, code, function(user, errorMessage){
+    if (errorMessage) {
+      response.error(JSON.stringify({code:111, message: errorMessage}));
+    } else {
+      user.save(null, {
+        useMasterKey: true,
+        success: function() {
+          console.log("Save user ok");
+          response.success(user);
+        },
+        error: function(object, error) {
+          console.log("Save user error: "+error.code+" "+error.message);
+          response.error(JSON.stringify({code: 106, message: "User save error"}));
+        }
+      });
+    }
+  });
+});
+
+Parse.Cloud.define("deleteCard", function(request, response) 
+{
+  var klpayment = require('cloud/klpayment.js');
+  var owner = request.user;
+  var cardId = request.params.cardId;
+  klpayment.removeCard(owner, cardId, function(paymentInfo, errorMessage){
+    if (errorMessage) {
+      response.error(JSON.stringify({code:111, message: errorMessage}));
+    } else {
+      response.success(paymentInfo);
+    }
+  });
+});
+
+Parse.Cloud.define("buyTickets", function(request, response) 
+{
+  var klpayment = require('cloud/klpayment.js');
+  var owner = request.user;
+  var cardId = request.params.cardId;
+  var payValue = request.params.payValue;
+  var eventId = request.params.eventId;
   var fetchQuery = new Parse.Query(Parse.Object.extend("Event"));
+  fetchQuery.include("price");
+  fetchQuery.include("owner");
   fetchQuery.get(eventId, {
     success: function(eventObject) {
-      var privacyType = eventObject.get("privacy");
-      var owner = eventObject.get("owner");
-      if (privacyType === 2 && !(indexOf.call((eventObject.get("invited"), sender.id) !== -1) || (owner.id === sender.id))) {
-        response.error(JSON.stringify({code: 110, message: "You doesnt have permissions for this operation!"}));
-      } else if (privacyType === 1 && owner.id !== sender.id) {
-        response.error(JSON.stringify({code: 110, message: "You doesnt have permissions for this operation!"}));
+      var price = eventObject.get("price");
+      var pricingType = price.get('pricingType');
+      if (pricingType !== 1) {
+        console.log("Wrong payment type");
+        response.error(JSON.stringify({code: 111, message: "Wrong payment type"}));
       } else {
-        if (isInvite) {
-          eventObject.addUnique("invited", invitedId);
+        var soldTickets = price.get("soldTickets");
+        var maximumTickets = price.get("maximumTickets");
+        if (soldTickets+payValue > maximumTickets) {
+          console.log("This event sold out: "+error.code+" "+error.message);
+          response.error(JSON.stringify({code: 112, message: "Event sold out"}));
         } else {
-          eventObject.remove("invited", invitedId);
-        }
-        eventObject.save(null, {
-          useMasterKey: true,
-          success: function() {
-            console.log("Event save ok");
-            if (isInvite) {
-              inviteUser(eventObject, sender, invitedId, response);
+          var amount = payValue * price.get("pricePerPerson");
+          klpayment.charge(owner, cardId, eventObject.get("owner"), amount, function(newCharge, errorMessage){
+            if (errorMessage) {
+              response.error(JSON.stringify({code:111, message: errorMessage}));
             } else {
-              console.log(isInvite);
-              deleteInviteUser(eventObject, sender, invitedId, response);
+              newCharge.set('event', eventObject);
+              var price = eventObject.get('price');
+              price.addUnique("payments", newCharge);
+              if (soldTickets) {
+                soldTickets = soldTickets + payValue;
+              } else {
+                soldTickets = payValue;
+              }
+              price.set("soldTickets", soldTickets);
+              eventObject.set("price", price);
+              eventObject.addUnique("attendees", owner.id);
+              eventObject.save(null, {
+                useMasterKey: true,
+                success: function() {
+                  activity.addActivity(activityType.KLActivityTypePayForEvent, owner, eventObject.get("owner"), eventObject).then(function () {
+                    response.success(eventObject);
+                  },
+                  function (error) {
+                    response.error(error);
+                  });
+                },
+                error: function(object, error) {
+                  console.log("Event save error: "+error.code+" "+error.message);
+                  response.error(JSON.stringify({code: 106, message: "Event save error"}));
+                }
+              });
             }
-          },
-          error: function(object, error) {
-            console.log("Event save error: "+error.code+" "+error.message);
-            response.error(JSON.stringify({code: 106, message: "Event save error"}));
-          }
-        });
+          });
+        }
       }
     },
     error: function(object, error) {
@@ -185,177 +233,88 @@ Parse.Cloud.define("invite", function(request, response) {
   });
 });
 
-Parse.Cloud.define("attend", function(request, response) {
-  var sender = request.user;
+Parse.Cloud.define("throwIn", function(request, response) 
+{
+  var klpayment = require('cloud/klpayment.js');
+  var owner = request.user;
+  var cardId = request.params.cardId;
+  var payValue = request.params.payValue;
   var eventId = request.params.eventId;
   var fetchQuery = new Parse.Query(Parse.Object.extend("Event"));
   fetchQuery.include("price");
+  fetchQuery.include("owner");
   fetchQuery.get(eventId, {
     success: function(eventObject) {
       var price = eventObject.get("price");
       var pricingType = price.get('pricingType');
-      var minimumAmount = price.get('minimumAmount');
-      var privacy = eventObject.get('privacy');
-      console.log("Min " + minimumAmount + " type " + pricingType);
-      if (pricingType === 0 || (pricingType===2 && minimumAmount === 0)) {
-        if (indexOf.call(eventObject.get("attendees"), sender.id) !== -1) {
-          eventObject.remove("attendees", sender.id);
-          eventObject.save(null, {
-            useMasterKey: true,
-            success: function() {
-              console.log("Event save ok");
-              response.success(eventObject);
-            },
-            error: function(object, error) {
-              console.log("Event save error: "+error.code+" "+error.message);
-              response.error(JSON.stringify({code: 106, message: "Event save error"}));
-            }
-          });
+      if (pricingType !== 2) {
+        console.log("Wrong payment type");
+        response.error(JSON.stringify({code: 111, message: "Wrong payment type"}));
+      } else {
+        var minimumAmount = price.get("minimumAmount");
+        if (payValue < minimumAmount) {
+          console.log("You should pay more for this event");
+          response.error(JSON.stringify({code: 112, message: "You should pay more for this event"}));
         } else {
-          eventObject.addUnique("attendees", sender.id);
-          eventObject.save(null, {
-            useMasterKey: true,
-            success: function() {
-              addActivity(activityType.KLActivityTypeGoesToMyEvent, sender, eventObject, eventObject.get("owner"), null, function(errorMessage){
-                if (errorMessage) {
-                  response.error(errorMessage);
-                } else {
-                  if (privacy === 0) {
-                    addActivity(activityType.KLActivityTypeGoesToEvent, sender, eventObject, null, null, function(errorMessage){
-                      if (errorMessage) {
-                        response.error(errorMessage);
-                      } else {
-                        response.success(eventObject);
-                      }
-                    });
-                  } else {
+          klpayment.charge(owner, cardId, eventObject.get("owner"),  payValue, function(newCharge, errorMessage){
+            if (errorMessage) {
+              response.error(JSON.stringify({code:111, message: errorMessage}));
+            } else {
+              newCharge.set('event', eventObject);
+              var price = eventObject.get('price');
+              price.addUnique("payments", newCharge);
+              var gathered = price.get("throwIn")
+              if (gathered) {
+                gathered = gathered + payValue;
+              } else {
+                gathered = payValue;
+              }
+              price.set("throwIn", gathered);
+              eventObject.set("price", price);
+              eventObject.addUnique("attendees", owner.id);
+              eventObject.save(null, {
+                useMasterKey: true,
+                success: function() {
+                  activity.addActivity(activityType.KLActivityTypePayForEvent, owner, eventObject.get("owner"), eventObject).then(function () {
                     response.success(eventObject);
-                  }
+                  },
+                  function (error) {
+                    response.error(error);
+                  });
+                },
+                error: function(object, error) {
+                  console.log("Event save error: "+error.code+" "+error.message);
+                  response.error(JSON.stringify({code: 106, message: "Event save error"}));
                 }
               });
-            },
-            error: function(object, error) {
-              console.log("Event save error: "+error.code+" "+error.message);
-              response.error(JSON.stringify({code: 106, message: "Event save error"}));
             }
           });
         }
-      } else {
-        response.error(JSON.stringify({code: 111, message: "You should pay for this event!"}));
       }
     },
     error: function(object, error) {
-          console.log("error: "+error.code+" "+error.message);
-          response.error(JSON.stringify({code: 109, message: "Event fetch error", error: error}));
+      console.log("error: "+error.code+" "+error.message);
+      response.error(JSON.stringify({code: 109, message: "Event fetch error", error: error}));
     } 
   });
 });
 
-var inviteUser = function(event, from, toId, response) {
-    var query = new Parse.Query(Invite);
-    var to = new Parse.User();
-    to.id = toId;
-    query.equalTo('to', to);
-    query.equalTo('event', event);
-    query.first({
-      success: function(invite) {
-        if(invite) {
-          response.error(JSON.stringify({code: 108, message: "You alredy invite this user"}));
-        } else {
-          console.log("Invite not found, creating new one");
-          to.set("invited", 1);
-          invite = new Invite();
-          invite.set('from', from);
-          invite.set('to', to);
-          invite.set('event', event);
-          invite.set('status', 0);
-          invite.save(null, {
-            useMasterKey: true,
-            success: function() {
-              console.log("Invite save ok");              
-              response.success(event);
-            },
-            error: function(object, error) {
-              console.log("Invite save error: "+error.code+" "+error.message);
-              response.error(JSON.stringify({code: 106, message: "Invite save error"}));
-            }
-      });
-        }
-      },
-      error: function(error) {
-        console.log("error: " + error.code + " " + error.message);
-        response.error(JSON.stringify({code: 106, message: "Invite delete error"}));
-      }
-    });
-};
-
-var deleteInviteUser = function(event, from, toId, response) {
-  var query = new Parse.Query(Invite);
-  var to = new Parse.User();
-  to.id = toId;
-  query.equalTo('to', to);
-  query.equalTo('event', event);
-  query.first({
-    success: function(invite) {
-      if(invite) {
-        invite.destroy({
-          useMasterKey: true,
-          success: function() {
-            console.log("Invite delete ok");              
-            response.success(event);
-          },
-          error: function(object, error) {
-            console.log("Invite save error: "+error.code+" "+error.message);
-            response.error(JSON.stringify({code: 106, message: "Invite delete error"}));
-          }
-        });
-      } else {
-        response.error(JSON.stringify({code: 108, message: "Cant find this invite"}));
-      }
-    },
-    error: function(error) {
-      console.log("error: " + error.code + " " + error.message);
-      response.error(JSON.stringify({code: 106, message: "Invite delete error"}));
-    }
-  });
-};
+//---
+//---
+//---
+//!!! Trigers
+//---
+//---
+//---
 
 Parse.Cloud.afterSave("Event", function(request) {
+  //Add new event to createdEvents list for user
   if (request.object.existed() === false) {
-    var owner = request.object.get("owner");
-    owner.addUnique("createdEvents", request.object.id);
-    owner.save(null, {
-      useMasterKey: true,
-      success: function() {
-        console.log("Create event ok");
-        if (request.object.get('privacy') === 0) {
-          var fetchQuery = new Parse.Query(Parse.User);
-          fetchQuery.get(owner.id, {
-            success: function(user) {
-              if (user) {
-                addActivity(activityType.KLActivityTypeCreateEvent, user, request.object, null, null, function(errorMessage){
-                  if (errorMessage) {
-                    console.log(errorMessage);
-                  }
-                });
-              }
-            },
-            error: function(object, error) {
-              console.log("error: "+error.code+" "+error.message);
-              callBack();
-            } 
-          });
-        }
-      },
-      error: function(object, error) {
-        console.log("Create event error: "+error.code+" "+error.message);
-      }
-    });
+    events.updateCreatedEvents(request.object);
   }
 });
 
-
-var Image = require("parse-image");
+//crop user image before save profile
 Parse.Cloud.beforeSave(Parse.User, function(request, response) {
   var user = request.object;
   if (!user.dirty("userImage")) {
@@ -480,225 +439,6 @@ Parse.Cloud.afterDelete(Parse.User, function(request) {
     console.log(error);
   });
 });
-
-Parse.Cloud.define("addCard", function(request, response) 
-{
-  var klpayment = require('cloud/klpayment.js');
-  var owner = request.user;
-  var source = request.params.token;
-  klpayment.addCard(owner, source, function(paymentInfo, errorMessage){
-    if (errorMessage) {
-      response.error(JSON.stringify({code:111, message: errorMessage}));
-    } else {
-      owner.set("paymentInfo", paymentInfo);
-      owner.save(null, {
-        useMasterKey: true,
-        success: function() {
-          console.log("Save payment info ok");
-          response.success(paymentInfo);
-        },
-        error: function(object, error) {
-          console.log("Save payment info error: "+error.code+" "+error.message);
-          response.error(JSON.stringify({code: 106, message: "PaymentInfo save error"}));
-        }
-      });
-    }
-  });
-});
-
-Parse.Cloud.define("authStripeConnect", function(request, response) 
-{
-  var klpayment = require('cloud/klpayment.js');
-  var owner = request.user;
-  var code = request.params.code;
-  klpayment.authorizeWithStripeConnect(owner, code, function(user, errorMessage){
-    if (errorMessage) {
-      response.error(JSON.stringify({code:111, message: errorMessage}));
-    } else {
-      user.save(null, {
-        useMasterKey: true,
-        success: function() {
-          console.log("Save user ok");
-          response.success(user);
-        },
-        error: function(object, error) {
-          console.log("Save user error: "+error.code+" "+error.message);
-          response.error(JSON.stringify({code: 106, message: "User save error"}));
-        }
-      });
-    }
-  });
-});
-
-Parse.Cloud.define("deleteCard", function(request, response) 
-{
-  var klpayment = require('cloud/klpayment.js');
-  var owner = request.user;
-  var cardId = request.params.cardId;
-  klpayment.removeCard(owner, cardId, function(paymentInfo, errorMessage){
-    if (errorMessage) {
-      response.error(JSON.stringify({code:111, message: errorMessage}));
-    } else {
-      response.success(paymentInfo);
-    }
-  });
-});
-
-Parse.Cloud.define("buyTickets", function(request, response) 
-{
-  var klpayment = require('cloud/klpayment.js');
-  var owner = request.user;
-  var cardId = request.params.cardId;
-  var payValue = request.params.payValue;
-  var eventId = request.params.eventId;
-  var fetchQuery = new Parse.Query(Parse.Object.extend("Event"));
-  fetchQuery.include("price");
-  fetchQuery.include("owner");
-  fetchQuery.get(eventId, {
-    success: function(eventObject) {
-      var price = eventObject.get("price");
-      var pricingType = price.get('pricingType');
-      if (pricingType !== 1) {
-        console.log("Wrong payment type");
-        response.error(JSON.stringify({code: 111, message: "Wrong payment type"}));
-      } else {
-        var soldTickets = price.get("soldTickets");
-        var maximumTickets = price.get("maximumTickets");
-        if (soldTickets+payValue > maximumTickets) {
-          console.log("This event sold out: "+error.code+" "+error.message);
-          response.error(JSON.stringify({code: 112, message: "Event sold out"}));
-        } else {
-          var amount = payValue * price.get("pricePerPerson");
-          klpayment.charge(owner, cardId, eventObject.get("owner"), amount, function(newCharge, errorMessage){
-            if (errorMessage) {
-              response.error(JSON.stringify({code:111, message: errorMessage}));
-            } else {
-              newCharge.set('event', eventObject);
-              var price = eventObject.get('price');
-              price.addUnique("payments", newCharge);
-              if (soldTickets) {
-                soldTickets = soldTickets + payValue;
-              } else {
-                soldTickets = payValue;
-              }
-              price.set("soldTickets", soldTickets);
-              eventObject.set("price", price);
-              eventObject.addUnique("attendees", owner.id);
-              eventObject.save(null, {
-                useMasterKey: true,
-                success: function() {
-                  console.log("Event save ok");
-
-                  addActivity(activityType.KLActivityTypePayForEvent, owner, eventObject, eventObject.get("owner"), null, function(errorMessage){
-                    if (errorMessage) {
-                      response.error(errorMessage);
-                    } else {
-                      response.success(eventObject);
-                    }
-                  });
-
-                },
-                error: function(object, error) {
-                  console.log("Event save error: "+error.code+" "+error.message);
-                  response.error(JSON.stringify({code: 106, message: "Event save error"}));
-                }
-              });
-            }
-          });
-        }
-      }
-    },
-    error: function(object, error) {
-      console.log("error: "+error.code+" "+error.message);
-      response.error(JSON.stringify({code: 109, message: "Event fetch error", error: error}));
-    } 
-  });
-});
-
-Parse.Cloud.define("throwIn", function(request, response) 
-{
-  var klpayment = require('cloud/klpayment.js');
-  var owner = request.user;
-  var cardId = request.params.cardId;
-  var payValue = request.params.payValue;
-  var eventId = request.params.eventId;
-  var fetchQuery = new Parse.Query(Parse.Object.extend("Event"));
-  fetchQuery.include("price");
-  fetchQuery.include("owner");
-  fetchQuery.get(eventId, {
-    success: function(eventObject) {
-      var price = eventObject.get("price");
-      var pricingType = price.get('pricingType');
-      if (pricingType !== 2) {
-        console.log("Wrong payment type");
-        response.error(JSON.stringify({code: 111, message: "Wrong payment type"}));
-      } else {
-        var minimumAmount = price.get("minimumAmount");
-        if (payValue < minimumAmount) {
-          console.log("You should pay more for this event");
-          response.error(JSON.stringify({code: 112, message: "You should pay more for this event"}));
-        } else {
-          klpayment.charge(owner, cardId, eventObject.get("owner"),  payValue, function(newCharge, errorMessage){
-            if (errorMessage) {
-              response.error(JSON.stringify({code:111, message: errorMessage}));
-            } else {
-              newCharge.set('event', eventObject);
-              var price = eventObject.get('price');
-              price.addUnique("payments", newCharge);
-              var gathered = price.get("throwIn")
-              if (gathered) {
-                gathered = gathered + payValue;
-              } else {
-                gathered = payValue;
-              }
-              price.set("throwIn", gathered);
-              eventObject.set("price", price);
-              eventObject.addUnique("attendees", owner.id);
-              eventObject.save(null, {
-                useMasterKey: true,
-                success: function() {
-                  console.log("Event save ok");
-
-                  addActivity(activityType.KLActivityTypePayForEvent, owner, eventObject, eventObject.get("owner"), null, function(errorMessage){
-                    if (errorMessage) {
-                      response.error(errorMessage);
-                    } else {
-                      response.success(eventObject);
-                    }
-                  });
-                },
-                error: function(object, error) {
-                  console.log("Event save error: "+error.code+" "+error.message);
-                  response.error(JSON.stringify({code: 106, message: "Event save error"}));
-                }
-              });
-            }
-          });
-        }
-      }
-    },
-    error: function(object, error) {
-      console.log("error: "+error.code+" "+error.message);
-      response.error(JSON.stringify({code: 109, message: "Event fetch error", error: error}));
-    } 
-  });
-});
-
-var activityType = {
-    KLActivityTypeFollowMe :              0,
-    KLActivityTypeFollow :                1,
-    KLActivityTypeCreateEvent :           2,
-    KLActivityTypeGoesToEvent :           3,
-    KLActivityTypeGoesToMyEvent :         4,
-    KLActivityTypeEventCanceled :         5,
-    KLActivityTypeEventChangedName :      6,
-    KLActivityTypeEventChangedLocation :  7,
-    KLActivityTypeEventChangedTime :      8,
-    KLActivityTypePhotosAdded :           9,
-    KLActivityTypeCommentAdded :          10,
-    KLActivityTypePayForEvent :           11,
-    KLActivityTypeCommentAddedToAttendedEvent : 12,
-}
 
 Parse.Cloud.afterSave("Invite", function(request) {
 
@@ -862,203 +602,13 @@ Parse.Cloud.afterSave("Activity", function(request) {
   });
 });
 
-function addActivity(type, from, event, to, photo, callback) {
-  var moment = require('cloud/moment')
-  switch (type) {
-    case activityType.KLActivityTypeFollowMe:
-        var query = new Parse.Query(Activity);
-        query.equalTo("activityType", type);
-        query.equalTo("observers", to.id);
-        query.greaterThan("createdAt", moment().subtract(1, 'd').toDate());
-        query.first({
-          success: function (oldActivity) {
-            if (!oldActivity) {
-              oldActivity = new Activity();
-              oldActivity.set("activityType", type);
-              oldActivity.addUnique("observers", to.id);
-            }
-            oldActivity.addUnique("users", from);
-            oldActivity.save(null, {
-              useMasterKey: true,
-              success: function() {
-                callback(null);
-              },
-              error: function(object, error) {
-                console.log("Activity save error: "+error.code+" "+error.message);
-                callback(JSON.stringify({code: 106, message: "Activity save error"}));
-              }
-            });
-          },
-          error: function (error) {
-            callback(error.message);
-          }
-        });
-        break;
-    case activityType.KLActivityTypeFollow:
-        var query = new Parse.Query(Activity);
-        query.equalTo("activityType", type);
-        query.equalTo("from", from);
-        query.greaterThan("createdAt", moment().subtract(1, 'd').toDate());
-        query.first({
-          success: function (oldActivity) {
-            if (!oldActivity) {
-              oldActivity = new Activity();
-              oldActivity.set("activityType", type);
-              oldActivity.set("from", from);
-            }
-            var observers = from.get("followers");
-            if (observers) {
-              var arrayLength = observers.length;
-              var newObservers = new Array();
-              for (var i = 0; i < arrayLength; i++) {
-                var temp = observers[i];
-                if (temp !== to.id) {
-                  newObservers.push(temp);
-                }
-              }
-              oldActivity.set("observers", newObservers);
-            }
-            oldActivity.addUnique("users", to);
-            oldActivity.save(null, {
-              useMasterKey: true,
-              success: function() {
-                callback(null);
-              },
-              error: function(object, error) {
-                console.log("Activity save error: "+error.code+" "+error.message);
-                callback(JSON.stringify({code: 106, message: "Activity save error"}));
-              }
-            });
-          },
-          error: function (error) {
-            callback(error.message);
-          }
-        });
-        break;
-    case activityType.KLActivityTypeCreateEvent:
-        oldActivity = new Activity();
-        oldActivity.set("activityType", type);
-        oldActivity.set("from", from);
-        oldActivity.set("event", event);
-        oldActivity.set("observers", from.get("followers"));
-        oldActivity.save(null, {
-          useMasterKey: true,
-          success: function() {
-            callback(null);
-          },
-          error: function(object, error) {
-            console.log("Activity save error: "+error.code+" "+error.message);
-            callback(JSON.stringify({code: 106, message: "Activity save error"}));
-          }
-        });
-        break;
-    case activityType.KLActivityTypeGoesToEvent:
-        oldActivity = new Activity();
-        oldActivity.set("activityType", type);
-        oldActivity.set("from", from);
-        oldActivity.set("event", event);
-        var ownerId = event.get('owner').id;
-        var observers = from.get("followers");
-        if (observers) {
-          var arrayLength = observers.length;
-          var newObservers = new Array();
-          for (var i = 0; i < arrayLength; i++) {
-            var temp = observers[i];
-            if (temp !== ownerId) {
-              newObservers.push(temp);
-            }
-          }
-          oldActivity.set("observers", newObservers);
-        }
-        oldActivity.save(null, {
-          useMasterKey: true,
-          success: function() {
-            callback(null);
-          },
-          error: function(object, error) {
-            console.log("Activity save error: "+error.code+" "+error.message);
-            callback(JSON.stringify({code: 106, message: "Activity save error"}));
-          }
-        });
-        break;
-    case activityType.KLActivityTypeGoesToMyEvent:
-        var query = new Parse.Query(Activity);
-        query.equalTo("activityType", type);
-        query.equalTo("observers", to.id);
-        query.equalTo("event", event);
-        query.greaterThan("createdAt", moment().subtract(1, 'd').toDate());
-        query.first({
-          success: function (oldActivity) {
-            if (!oldActivity) {
-              oldActivity = new Activity();
-              oldActivity.set("activityType", type);
-              oldActivity.set("event", event);
-              oldActivity.addUnique("observers", to.id);
-            }
-            oldActivity.addUnique("users", from);
-            oldActivity.save(null, {
-              useMasterKey: true,
-              success: function() {
-                callback(null);
-              },
-              error: function(object, error) {
-                console.log("Activity save error: "+error.code+" "+error.message);
-                callback(JSON.stringify({code: 106, message: "Activity save error"}));
-              }
-            });
-          },
-          error: function (error) {
-            callback(error.message);
-          }
-        });
-        break;
-    case activityType.KLActivityTypeEventCanceled:
-        oldActivity = new Activity();
-        oldActivity.set("activityType", type);
-        oldActivity.set("from", from);
-        oldActivity.set("deletedEventTitle", event.get("title"));
-        var attendees = event.get("attendees");
-        var savers = event.get("savers");
-        if (attendees && savers) {
-          oldActivity.set("observers", attendees.concat(savers));
-        } else if (attendees) {
-          oldActivity.set("observers", attendees);
-        } else if (savers) {
-          oldActivity.set("observers", savers);
-        }
-        oldActivity.save(null, {
-          useMasterKey: true,
-          success: function() {
-            callback(null);
-          },
-          error: function(object, error) {
-            console.log("Activity save error: "+error.code+" "+error.message);
-            callback(JSON.stringify({code: 106, message: "Activity save error"}));
-          }
-        });
-        break;
-    case activityType.KLActivityTypePayForEvent:
-        oldActivity = new Activity();
-        oldActivity.set("activityType", type);
-        oldActivity.set("from", from);
-        oldActivity.set("event", event);
-        oldActivity.addUnique("observers", to.id);
-        oldActivity.save(null, {
-          useMasterKey: true,
-          success: function() {
-            callback(null);
-          },
-          error: function(object, error) {
-            console.log("Activity save error: "+error.code+" "+error.message);
-            callback(JSON.stringify({code: 106, message: "Activity save error"}));
-          }
-        });
-        break;
-    default:
-        callback(JSON.stringify({code: 101, message: "Unknown activity type"}));
-        break;
-  }
-}
+//---
+//---
+//---
+//!!! Background jobs
+//---
+//---
+//---
 
 Parse.Cloud.job("deleteNullEventsFromList", function(request, status) {
   Parse.Cloud.useMasterKey();
@@ -1087,47 +637,25 @@ Parse.Cloud.job("deleteNullEventsFromList", function(request, status) {
   });
 });
 
-Parse.Cloud.job("deleteNullUserFromList", function(request, status) {
-  Parse.Cloud.useMasterKey();
+//---
+//---
+//---
+//!!! Depricated funciton for old versions !!!
+//---
+//---
+//---
+
+Parse.Cloud.define("checkUsersFromContacts", function(request, response) {
+  var phonesArray = request.params.phonesArray;
   var query = new Parse.Query(Parse.User);
-  query.each(function(user) {
-      var ids = user.get("followers");
-      if (ids !== undefined && ids.length > 0) {
-        var userQuery = new Parse.Query(Parse.User);
-        userQuery.containedIn("objectId", ids);
-        return userQuery.find().then(function (users) {
-          var usersArray = new Array();
-          for(i = 0; i<users.length; i++) {
-            var tempUser = users[i];
-            usersArray.push(tempUser.id);
-          }
-          user.set("followers", usersArray);
-          return user.save();
-        });
-      }
-  }).then(function() {
-    // Set the job's success status
-    status.success("Update events successfully.");
-  }, function(error) {
-    // Set the job's error status
-    status.error("Uh oh, something went wrong.");
+  query.containedIn("phoneNumber", phonesArray);
+  query.equalTo("isRegistered", true);
+  query.find({
+    success: function (usersArray) {
+      response.success(usersArray);
+    },
+    error: function (error) {
+      response.error(err.message);
+    }
   });
 });
-
-var indexOf = function(needle) {
-  if(typeof Array.prototype.indexOf === 'function') {
-    indexOf = Array.prototype.indexOf;
-  } else {
-    indexOf = function(needle) {
-      var i = -1, index = -1;
-      for(i = 0; i < this.length; i++) {
-        if(this[i] === needle) {
-          index = i;
-          break;
-        }
-      }
-      return index;
-    };
-  }
-  return indexOf.call(this, needle);
-};
