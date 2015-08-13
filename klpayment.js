@@ -173,7 +173,7 @@
         callBack(user);
       },
       error: function(httpResponse) {
-        console.log('Request failed with response code ' + httpResponse.status);
+        console.log('Request failed with response code ' + httpResponse.status + httpResponse.text);
         var jsonResult = JSON.parse(httpResponse.text);
         callBack(null, jsonResult.error.message);
       }
