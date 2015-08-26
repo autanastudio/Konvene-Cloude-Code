@@ -48,7 +48,7 @@ var updateRaiting = function (value, object) {
   } else {
     raiting = weight[value];
   }
-  object.set("raiting". raiting);
+  object.set("raiting", raiting);
 };
 
 //Attend to event, delete if alredy attend
