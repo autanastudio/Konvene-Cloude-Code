@@ -27,7 +27,7 @@ var vote = function (sender, value, eventId) {
       extension.addUnique("voters", sender.id);
       updateRaiting(value, extension);
       updateRaiting(value, owner);
-      event.save().then(function (event) {
+      event.save(null, {useMasterKey : true}).then(function (event) {
         promise.resolve(event);
       },
       function (error) {
