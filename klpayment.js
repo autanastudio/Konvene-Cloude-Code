@@ -32,7 +32,6 @@
 
   function getPaymentInfo(user, callBack) {
     var userPayment = user.get('paymentInfo');
-    console.log(userPayment);
     if (userPayment !== undefined) {
       var fetchQuery = new Parse.Query(UserPayment);
       fetchQuery.get(userPayment.id, {

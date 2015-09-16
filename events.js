@@ -133,7 +133,6 @@ var invite = function (sender, invitedId, eventId, isInvite) {
 //Check event permission (private, private+)
 var checkEventPermission = function (event, user) {
   var privacyType = event.get("privacy");
-  console.log(privacyType);
   var owner = event.get("owner");
   var invited = event ? event.get("invited") : null;
   if (privacyType === 2 && !((invited && invited.indexOf(user.id) !== -1) || (owner.id === user.id))) {

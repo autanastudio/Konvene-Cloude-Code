@@ -20,7 +20,6 @@ var activityType = {
 }
 
 var addActivity = function (type, from, to, event) {
-  Parse.Cloud.useMasterKey();
   var activityController = {
     type : type,
     from : from,
@@ -45,7 +44,7 @@ var addActivity = function (type, from, to, event) {
     } else if (type == activityType.KLActivityTypeGoesToMyEvent) {
       activity.addUnique("users", from);
     }
-    activity.save().then(function (activity) {
+    activity.save(null, {useMasterKey: true}).then(function (activity) {
       promise.resolve(activity);
     },
     function (error) {

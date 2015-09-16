@@ -59,8 +59,8 @@ Parse.Cloud.define("follow", function(request, response) {
   var sender = request.user;
   var followingId = request.params.followingId;
   var isFollow = request.params.isFollow;
-  social.follow(sender, followingId, isFollow).then(function () {
-    response.success(sender);
+  social.follow(sender, followingId, isFollow).then(function (newSender) {
+    response.success(newSender);
   },
   function (error) {
     response.error(errors.errorFollowUserError);
@@ -315,7 +315,7 @@ Parse.Cloud.afterSave("Event", function(request) {
   }
 });
 
-//crop user image before save profile
+// crop user image before save profile
 Parse.Cloud.beforeSave(Parse.User, function(request, response) {
   var user = request.object;
   if (!user.dirty("userImage")) {
@@ -422,7 +422,7 @@ Parse.Cloud.afterDelete(Parse.User, function(request) {
     follower.remove("followers", user.id);
     return follower.save();
   }).then(function() {
-    console.log("Remove user " + user.get("fullName") + (" from followers list"));
+
   }, function(error) {
     console.log(error);
   });
@@ -432,7 +432,7 @@ Parse.Cloud.afterDelete(Parse.User, function(request) {
     follower.remove("following", user.id);
     return follower.save();
   }).then(function() {
-    console.log("Remove user " + user.get("fullName") + (" from following list"));
+
   }, function(error) {
     console.log(error);
   });
@@ -493,7 +493,6 @@ Parse.Cloud.afterSave("Activity", function(request) {
     success: function(activity) {
 
       query.equalTo("notifications", activity.get("activityType"));
-      console.log(activity.get("observers"));
       query.containedIn("user", activity.get("observers"));
 
       var users = activity.get("users");
@@ -550,7 +549,6 @@ Parse.Cloud.afterSave("Activity", function(request) {
             alert: "\"" +event.get("title") + "\" has ended, tell us about your experience",
             badge: "Increment"
           };
-        console.log(body);
         if (event) {
           body.eventId = event.id;
         }
