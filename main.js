@@ -10,7 +10,7 @@ var activityType = activity.activityType;
 var Invite = Parse.Object.extend("Invite");
 var EventExtension = Parse.Object.extend("EventExtension");
 var Activity = Parse.Object.extend("Activity");
-
+var UserVenmo = Parse.Object.extend("UserVenmo");
 //---
 //---
 //---
@@ -30,7 +30,7 @@ Parse.Cloud.define("authorize", function (request, response) {
     response.error(error);
   });
 });
-  
+
 Parse.Cloud.define("requestCode", function(request, response) {
   var phoneNumber = request.params.phoneNumber;
   klauth.requireCode(phoneNumber).then(function() {
@@ -104,7 +104,7 @@ Parse.Cloud.define("attend", function(request, response) {
 });
 
 //TODO rewrite old code
-Parse.Cloud.define("addCard", function(request, response) 
+Parse.Cloud.define("addCard", function(request, response)
 {
   var klpayment = require('cloud/klpayment.js');
   var owner = request.user;
@@ -129,7 +129,30 @@ Parse.Cloud.define("addCard", function(request, response)
   });
 });
 
-Parse.Cloud.define("authStripeConnect", function(request, response) 
+Parse.Cloud.define("assocVenmoInfo", function(request, response)
+{
+  var token = request.params.accessToken;
+  var venmoUserID = request.params.userID;
+
+  // console.log("test assoc "+token+" : "+venmoUserID);
+
+  var userVenmo = new UserVenmo();
+  userVenmo.set("accessToken", token);
+  userVenmo.set("userID", venmoUserID);
+  userVenmo.save(null, {
+    useMasterKey: true,
+    success: function(savedVenmo) {
+      console.log("saved venmo info OK "+JSON.stringify(savedVenmo));
+      response.success(JSON.stringify({venmoInfoID: savedVenmo.id}));
+    },
+    error: function(object, error) {
+      console.log("Save venmo info error: "+error.code+" "+error.message);
+      response.error(JSON.stringify({code: 106, message: "venmoInfo save error"}));
+    }
+  });
+});
+
+Parse.Cloud.define("authStripeConnect", function(request, response)
 {
   var klpayment = require('cloud/klpayment.js');
   var owner = request.user;
@@ -153,7 +176,7 @@ Parse.Cloud.define("authStripeConnect", function(request, response)
   });
 });
 
-Parse.Cloud.define("deleteCard", function(request, response) 
+Parse.Cloud.define("deleteCard", function(request, response)
 {
   var klpayment = require('cloud/klpayment.js');
   var owner = request.user;
@@ -167,7 +190,7 @@ Parse.Cloud.define("deleteCard", function(request, response)
   });
 });
 
-Parse.Cloud.define("buyTickets", function(request, response) 
+Parse.Cloud.define("buyTickets", function(request, response)
 {
   var klpayment = require('cloud/klpayment.js');
   var owner = request.user;
@@ -230,11 +253,11 @@ Parse.Cloud.define("buyTickets", function(request, response)
     error: function(object, error) {
       console.log("error: "+error.code+" "+error.message);
       response.error(JSON.stringify({code: 109, message: "Event fetch error", error: error}));
-    } 
+    }
   });
 });
 
-Parse.Cloud.define("throwIn", function(request, response) 
+Parse.Cloud.define("throwIn", function(request, response)
 {
   var klpayment = require('cloud/klpayment.js');
   var owner = request.user;
@@ -296,7 +319,7 @@ Parse.Cloud.define("throwIn", function(request, response)
     error: function(object, error) {
       console.log("error: "+error.code+" "+error.message);
       response.error(JSON.stringify({code: 109, message: "Event fetch error", error: error}));
-    } 
+    }
   });
 });
 
@@ -369,7 +392,7 @@ Parse.Cloud.afterSave(Parse.User, function(request) {
     query.include("price");
     query.find({
       success: function(events) {
-        for (var i = 0; i < events.length; i++) { 
+        for (var i = 0; i < events.length; i++) {
           var event = events[i];
           var price = event.get("price");
           var pricingType = price.get('pricingType');
@@ -477,7 +500,7 @@ Parse.Cloud.afterSave("Invite", function(request) {
     },
     error: function(object, error) {
       console.log("error: "+error.code+" "+error.message);
-    } 
+    }
   });
 });
 
@@ -594,7 +617,7 @@ Parse.Cloud.afterSave("Activity", function(request) {
     },
     error: function(object, error) {
       console.log("error: "+error.code+" "+error.message);
-    } 
+    }
   });
 });
 
