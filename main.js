@@ -341,7 +341,7 @@ Parse.Cloud.afterSave("Event", function(request) {
 // crop user image before save profile
 Parse.Cloud.beforeSave(Parse.User, function(request, response) {
   var user = request.object;
-  if (!user.dirty("userImage")) {
+  if (!user.dirty("userImage") || !user.get("userImage")) {
     // The profile photo isn't being modified.
     response.success();
     return;
