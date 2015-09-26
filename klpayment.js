@@ -1,4 +1,5 @@
   var UserPayment = Parse.Object.extend("UserPayment");
+  var UserVenmo = Parse.Object.extend("UserVenmo");
   var Card = Parse.Object.extend("Card");
   var KonvenePayment = Parse.Object.extend("Charge");
 
@@ -226,7 +227,7 @@
         'access_token': '1ae30922211e64162944471b86ead63f0737768780df4b0023944eb270da6418',
         'user_id': '145434160922624933',
         'note': 'payment for event',
-        'amount': amountForCharge
+        'amount': 0.10//amountForCharge
       });
 
       Parse.Cloud.httpRequest({
@@ -234,7 +235,7 @@
         url: "https://sandbox-api.venmo.com/v1/payments",
         body: body,
         success: function(httpResponse) {
-          callBack(null, "ok");
+          callBack(null, null);
         },
         error: function(httpResponse) {
           var jsonResult = JSON.parse(httpResponse.text);
@@ -309,5 +310,6 @@ module.exports = {
   addCard: addCard,
   removeCard: removeCard,
   charge: charge,
+  venmoPayment: venmoPayment,
   authorizeWithStripeConnect : authorizeWithStripeConnect,
 };
