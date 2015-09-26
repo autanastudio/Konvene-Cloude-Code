@@ -4,12 +4,12 @@
 
   var stripeSecretKey = "sk_test_4ZGEKkDI9mNRzfaHlt1R5w3c";
   // var stripeSecretKey = "sk_live_4ZGEhsecTkKjo8xDRMvr89TA";
-  var strpeBaseURL = "api.stripe.com/v1"; 
+  var strpeBaseURL = "api.stripe.com/v1";
 
   var Stripe = require('stripe');
 
   Stripe.initialize(stripeSecretKey);
-  
+
   function createCustomer(user, callBack) {
     Stripe.Customers.create({
       account_balance: 0,
@@ -28,6 +28,28 @@
         callBack();
       }
     });
+  }
+
+  function getVenmoInfo(user, callBack) {
+    var userVenmo = user.get('venmoInfo');
+    if (userVenmo !== undefined) {
+      var fetchQuery = new Parse.Query(UserVenmo);
+      fetchQuery.get(userVenmo.id, {
+        success: function(venmoInfo) {
+          if (venmoInfo) {
+            console.log("venmo info fetched");
+            callBack(venmoInfo);
+          } else {
+            console.log("This venmo info doesnt exist!");
+            callBack();
+          }
+        },
+        error: function(object, error) {
+          console.log("error: "+error.code+" "+error.message);
+          callBack();
+        }
+      });
+    }
   }
 
   function getPaymentInfo(user, callBack) {
@@ -52,7 +74,7 @@
             userPayment.set("customerId", customerId);
             callBack(userPayment);
           });
-        } 
+        }
       });
     } else {
       userPayment = new UserPayment();
@@ -78,10 +100,10 @@
       error: function(object, error) {
         console.log("error: "+error.code+" "+error.message);
         callBack();
-      } 
+      }
     });
   }
- 
+
   function addCard(user, source, callBack) {
     getPaymentInfo(user, function(paymentInfo){
       Parse.Cloud.httpRequest({
@@ -178,7 +200,7 @@
       }
     });
   }
- 
+
   function changeSource(customerId, card, callBack) {
     Parse.Cloud.httpRequest({
       method:"POST",
@@ -193,6 +215,33 @@
         callBack(jsonResult.error.message);
       }
     });
+  }
+
+  function venmoPayment(user, owner, amount, callBack) {
+    getVenmoInfo(user, function(venmoInfo){
+      var amountForCharge = amount * 100;
+
+      var querystring = require('querystring');
+      var body = querystring.stringify({
+        'access_token': '1ae30922211e64162944471b86ead63f0737768780df4b0023944eb270da6418',
+        'user_id': '145434160922624933',
+        'note': 'payment for event',
+        'amount': amountForCharge
+      });
+
+      Parse.Cloud.httpRequest({
+        method:"POST",
+        url: "https://sandbox-api.venmo.com/v1/payments",
+        body: body,
+        success: function(httpResponse) {
+          callBack(null, "ok");
+        },
+        error: function(httpResponse) {
+          var jsonResult = JSON.parse(httpResponse.text);
+          callBack(null, jsonResult.error.message);
+        }
+      })
+    })
   }
 
   function charge(user, cardId, owner, amount, callBack) {
@@ -255,7 +304,7 @@
       });
     });
   }
- 
+
 module.exports = {
   addCard: addCard,
   removeCard: removeCard,
