@@ -219,30 +219,40 @@
   }
 
   function venmoPayment(user, owner, amount, callBack) {
-    getVenmoInfo(user, function(venmoInfo){
-      var amountForCharge = amount * 100;
+    getVenmoInfo(user, function(sendingVenmoInfo){
+      getVenmoInfo(owner, function(receivingVenmoInfo){
+        var amountForCharge = amount * 100;
 
-      var querystring = require('querystring');
-      var body = querystring.stringify({
-        'access_token': '1ae30922211e64162944471b86ead63f0737768780df4b0023944eb270da6418',
-        'user_id': '145434160922624933',
-        'note': 'payment for event',
-        'amount': 0.10//amountForCharge
+        var querystring = require('querystring');
+        var body = querystring.stringify({
+          'access_token': sendingVenmoInfo.get('accessToken'),//'1ae30922211e64162944471b86ead63f0737768780df4b0023944eb270da6418',
+          'user_id': receivingVenmoInfo.get('userID'),//'145434160922624933',
+          'note': 'payment for event',
+          'audience': 'private',
+          'amount': 0.10//amountForCharge
+        });
+
+        Parse.Cloud.httpRequest({
+          method:"POST",
+          url: "https://api.venmo.com/v1/payments",
+          body: body,
+          success: function(httpResponse) {
+            var jsonResult = httpResponse.text;
+            console.log("venmo"+jsonResult);
+            callBack(null, null);
+          },
+          error: function(httpResponse) {
+            var jsonResult = JSON.parse(httpResponse.text);
+            console.log("venmo error"+httpResponse.text);
+            if (jsonResult.error.code == 13004) {
+              callBack(null, "no linked accounts");
+            } else {
+              callBack(null, jsonResult.error.message);
+            }
+          }
+        });
       });
-
-      Parse.Cloud.httpRequest({
-        method:"POST",
-        url: "https://sandbox-api.venmo.com/v1/payments",
-        body: body,
-        success: function(httpResponse) {
-          callBack(null, null);
-        },
-        error: function(httpResponse) {
-          var jsonResult = JSON.parse(httpResponse.text);
-          callBack(null, jsonResult.error.message);
-        }
-      })
-    })
+    });
   }
 
   function charge(user, cardId, owner, amount, callBack) {
