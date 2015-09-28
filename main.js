@@ -25,7 +25,7 @@ Parse.Cloud.define("authorize", function (request, response) {
   klauth.getUserWithCode(phoneNumber, verificationCode).then(function (user) {
     return user.fetch({useMasterKey : true});
   }).then(function (user) {
-    response.success(user._sessionToken);
+    response.success(user.getSessionToken());
   },function (error) {
     response.error(error);
   });
