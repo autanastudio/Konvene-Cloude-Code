@@ -132,13 +132,17 @@ Parse.Cloud.define("addCard", function(request, response)
 Parse.Cloud.define("assocVenmoInfo", function(request, response)
 {
   var token = request.params.accessToken;
+  var refreshToken = request.params.refreshToken;
   var venmoUserID = request.params.userID;
+  var venmoUsername = request.params.username;
 
   // console.log("test assoc "+token+" : "+venmoUserID);
 
   var userVenmo = new UserVenmo();
   userVenmo.set("accessToken", token);
+  userVenmo.set("refreshToken", refreshToken);
   userVenmo.set("userID", venmoUserID);
+  userVenmo.set("username", venmoUsername);
   userVenmo.save(null, {
     useMasterKey: true,
     success: function(savedVenmo) {
