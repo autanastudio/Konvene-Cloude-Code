@@ -219,7 +219,7 @@ Parse.Cloud.define("buyVenmoTickets", function(request, response)
           response.error(JSON.stringify({code: 112, message: "Event sold out"}));
         } else {
           var amount = payValue * price.get("pricePerPerson");
-          klpayment.venmoPayment(owner, eventObject.get("owner"), amount, function(object, errorMessage){
+          klpayment.venmoPayment(owner, eventObject.get("owner"), amount, function(newCharge, errorMessage){
             if (errorMessage) {
               if (errorMessage == "no linked accounts") {
                 response.error(JSON.stringify({code:113, message: errorMessage}));
@@ -227,7 +227,10 @@ Parse.Cloud.define("buyVenmoTickets", function(request, response)
                 response.error(JSON.stringify({code:111, message: errorMessage}));
               }
             } else {
+              newCharge.set('event', eventObject);
               var price = eventObject.get('price');
+              price.addUnique("payments", newCharge);
+
               if (soldTickets) {
                 soldTickets = soldTickets + payValue;
               } else {
@@ -286,12 +289,15 @@ Parse.Cloud.define("throwInVenmo", function(request, response)
           console.log("You should pay more for this event");
           response.error(JSON.stringify({code: 112, message: "You should pay more for this event"}));
         } else {
-          klpayment.venmoPayment(owner, eventObject.get("owner"), payValue, function(object, errorMessage){
+          klpayment.venmoPayment(owner, eventObject.get("owner"), payValue, function(newCharge, errorMessage){
             if (errorMessage) {
               response.error(JSON.stringify({code:111, message: errorMessage}));
             } else {
+              newCharge.set('event', eventObject);
               var price = eventObject.get('price');
-              var gathered = price.get("throwIn")
+              price.addUnique("payments", newCharge);
+
+              var gathered = price.get("throwIn");
               if (gathered) {
                 gathered = gathered + payValue;
               } else {

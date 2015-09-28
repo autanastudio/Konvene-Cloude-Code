@@ -227,7 +227,7 @@
         var body = querystring.stringify({
           'access_token': sendingVenmoInfo.get('accessToken'),//'1ae30922211e64162944471b86ead63f0737768780df4b0023944eb270da6418',
           'user_id': receivingVenmoInfo.get('userID'),//'145434160922624933',
-          'note': 'payment for event',
+          'note': 'Payment for Konvene Event',
           'audience': 'private',
           'amount': 0.10//amountForCharge
         });
@@ -237,9 +237,23 @@
           url: "https://api.venmo.com/v1/payments",
           body: body,
           success: function(httpResponse) {
-            var jsonResult = httpResponse.text;
-            console.log("venmo"+jsonResult);
-            callBack(null, null);
+            var jsonResult = JSON.parse(httpResponse.text);
+            // console.log("text"+httpResponse.text);
+            // console.log("json"+jsonResult);
+            var newCharge = new KonvenePayment();
+            newCharge.set("paymentId", jsonResult.data.payment.id);
+            newCharge.set("owner", user);
+            newCharge.set("amount", amount);
+            newCharge.save(null, {
+              useMasterKey: true,
+              success: function(charge) {
+                callBack(charge, null);
+              },
+              error: function(error) {
+                console.log("Save charge error: "+error.code+" "+error.message);
+                callBack(null, "Charge save error");
+              }
+            });
           },
           error: function(httpResponse) {
             var jsonResult = JSON.parse(httpResponse.text);
