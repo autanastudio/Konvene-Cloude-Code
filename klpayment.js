@@ -6,6 +6,8 @@
   var stripeSecretKey = "sk_test_4ZGEKkDI9mNRzfaHlt1R5w3c";
   // var stripeSecretKey = "sk_live_4ZGEhsecTkKjo8xDRMvr89TA";
   var strpeBaseURL = "api.stripe.com/v1";
+  var venmoClientID = "2896";
+  var venmoClientSecret = "dpAxjgACZCqdhpb6UyhUczCDCz8hPqaS";
 
   var Stripe = require('stripe');
 
@@ -38,7 +40,6 @@
       fetchQuery.get(userVenmo.id, {
         success: function(venmoInfo) {
           if (venmoInfo) {
-            console.log("venmo info fetched");
             callBack(venmoInfo);
           } else {
             console.log("This venmo info doesnt exist!");
@@ -220,16 +221,24 @@
 
   function venmoPayment(user, owner, amount, callBack) {
     getVenmoInfo(user, function(sendingVenmoInfo){
+      if (sendingVenmoInfo == undefined) {
+        callBack(null, "error finding sender venmo info");
+        return;
+      }
+
       getVenmoInfo(owner, function(receivingVenmoInfo){
-        var amountForCharge = amount * 100;
+        if (receivingVenmoInfo == undefined) {
+          callBack(null, "error finding recip venmo info");
+          return;
+        }
 
         var querystring = require('querystring');
         var body = querystring.stringify({
           'access_token': sendingVenmoInfo.get('accessToken'),//'1ae30922211e64162944471b86ead63f0737768780df4b0023944eb270da6418',
           'user_id': receivingVenmoInfo.get('userID'),//'145434160922624933',
           'note': 'Payment for Konvene Event',
-          'audience': 'private',
-          'amount': 0.10//amountForCharge
+          'audience': 'public',
+          'amount': amount
         });
 
         Parse.Cloud.httpRequest({
