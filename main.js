@@ -147,7 +147,7 @@ Parse.Cloud.define("assocVenmoInfo", function(request, response)
     useMasterKey: true,
     success: function(savedVenmo) {
       console.log("saved venmo info OK "+JSON.stringify(savedVenmo));
-      response.success(JSON.stringify({venmoInfoID: savedVenmo.id}));
+      response.success(savedVenmo);
     },
     error: function(object, error) {
       console.log("Save venmo info error: "+error.code+" "+error.message);
