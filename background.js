@@ -2,8 +2,8 @@ var activity = require('cloud/activity.js');
 var activityType = activity.activityType;
 
 var parseApiUrl = "https://api.parse.com/1/jobs/";
-var parseAppId = "MI3UHH01oU7RrLFjgCai5l1vCZpDHRz4xuIVPmcw";
-var parseMasterKey = "VutRqNHi4LzqzsJhcvR0k7gHoD3Y6DiIXoeEmtsU";
+var parseAppId = "1V5JZTeeZ542nlDbDrq8cMYUJt34SSNDeOyUfJy8";
+var parseMasterKey = "Gz1P1AzYR8fBD5akcauh80D14mT5WjVcQtecYnD7";
 
 var Activity = Parse.Object.extend("Activity");
 var Event = Parse.Object.extend("Event");

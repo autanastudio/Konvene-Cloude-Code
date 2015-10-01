@@ -9,8 +9,8 @@ restrictedAcl.setPublicWriteAccess(false);
 
 function requireCode(phoneNumber) {
   var promise = new Parse.Promise();
-  // var code = _.random(100000, 999999).toString();
-  var code = String(123321);
+  var code = _.random(100000, 999999).toString();
+  // var code = String(123321);
 
   var query = new Parse.Query(Parse.User);
   query.equalTo("phoneNumber", phoneNumber);

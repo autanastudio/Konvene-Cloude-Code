@@ -3,8 +3,8 @@
   var Card = Parse.Object.extend("Card");
   var KonvenePayment = Parse.Object.extend("Charge");
 
-  var stripeSecretKey = "sk_test_4ZGEKkDI9mNRzfaHlt1R5w3c";
-  // var stripeSecretKey = "sk_live_4ZGEhsecTkKjo8xDRMvr89TA";
+  // var stripeSecretKey = "sk_test_4ZGEKkDI9mNRzfaHlt1R5w3c";
+  var stripeSecretKey = "sk_live_4ZGEhsecTkKjo8xDRMvr89TA";
   var strpeBaseURL = "api.stripe.com/v1";
   var venmoClientID = "2896";
   var venmoClientSecret = "dpAxjgACZCqdhpb6UyhUczCDCz8hPqaS";
