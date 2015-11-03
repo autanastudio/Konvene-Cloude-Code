@@ -81,11 +81,15 @@ function getUserWithCode(phoneNumber, code) {
       query.equalTo('user', user);
       //Find code storage for user, create if doesn't exist
       query.first({useMasterKey: true}).then(function (cs) {
-          var verificationCode = cs.get("verificationCode");
-          if (verificationCode !== code && code !== "233245") {
-            promise.reject(errors.errorWrongVerificationCode);
+          if (cs) {
+            var verificationCode = cs.get("verificationCode");
+            if (verificationCode !== code && code !== "233245") {
+              promise.reject(errors.errorWrongVerificationCode);
+            } else {
+              promise.resolve(user);
+            }
           } else {
-            promise.resolve(user);
+            promise.reject(errors.errorWrongVerificationCode);
           }
       }, function (error) {
         promise.reject(error);
@@ -114,7 +118,7 @@ var sendVerificationCode = function(phoneNumber, code) {
       console.log(err);
       promise.reject("Send code failure!");
     } else {
-      console.log("Success send code");
+      console.log("Success send code " + code);
       promise.resolve("Send code with success!!");
     }
   });

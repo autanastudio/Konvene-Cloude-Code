@@ -74,14 +74,19 @@ var attend = function (sender, eventId) {
         });
       } else {
         event.addUnique("attendees", sender.id);
-        activity.addActivity(activityType.KLActivityTypeGoesToMyEvent, sender, event.get("owner"), event).then(function () {
-          return activity.addActivity(activityType.KLActivityTypeGoesToEvent, sender, null, event);
-        }).then(function () {
-          promise.resolve(event);
-        },
-        function (error) {
-          promise.reject(errors.errorSaveObjectOnServer);
-        });
+
+        if (event.get('privacy') === 0) {
+          activity.addActivity(activityType.KLActivityTypeGoesToMyEvent, sender, event.get("owner"), event).then(function () {
+            return activity.addActivity(activityType.KLActivityTypeGoesToEvent, sender, null, event);
+          }).then(function () {
+            promise.resolve(event);
+          },
+          function (error) {
+            promise.reject(errors.errorSaveObjectOnServer);
+          });
+        } else {
+            promise.resolve(event);
+        }
       }
     } else {
       promise.reject(errors.errorPayedEvent);
