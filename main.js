@@ -5,6 +5,7 @@ var events = require('cloud/events.js');
 var background = require('cloud/background.js');
 var Image = require("parse-image");
 var activity = require('cloud/activity.js');
+var facebook = require('cloud/facebook.js');
 
 var activityType = activity.activityType;
 var Invite = Parse.Object.extend("Invite");
@@ -27,6 +28,21 @@ Parse.Cloud.define("authorize", function (request, response) {
   }).then(function (user) {
     response.success(user.getSessionToken());
   },function (error) {
+    response.error(error);
+  });
+});
+
+Parse.Cloud.define("authorizeWithFacebook", function (request, response) {
+  var user = request.user;
+  var fullName = request.params.fullName;
+  var email = request.params.email;
+  var phoneNumber = request.params.phoneNumber;
+  var facebookId = request.params.facebookId;
+  var facebookFriendIds = request.params.facebookFriendIds;
+
+  facebook.setupUser(user, fullName, email, phoneNumber, facebookId, facebookFriendIds).then(function (user) {
+    response.success(user);
+  }, function (error) {
     response.error(error);
   });
 });
@@ -568,6 +584,9 @@ Parse.Cloud.afterSave("Activity", function(request) {
         case activityType.KLActivityTypeCommentAdded:
         case activityType.KLActivityTypeCommentAddedToAttendedEvent:
             messageText = activity.get("from").get("fullName") + " commented " + activity.get("event").get("title") + ".";
+            break;
+        case activityType.KLActivityTypeFacebookFriendRegistered:
+            messageText = "Your facebook friend " + activity.get("from").get("fullName") + " joined Konvene!";
             break;
         default:
             break;

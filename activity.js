@@ -17,6 +17,7 @@ var activityType = {
   KLActivityTypeCommentAdded : 10,
   KLActivityTypePayForEvent : 11,
   KLActivityTypeCommentAddedToAttendedEvent : 12,
+  KLActivityTypeFacebookFriendRegistered : 13,
 }
 
 var addActivity = function (type, from, to, event) {
@@ -65,6 +66,7 @@ var isGroupedActivity = function (type) {
     case activityType.KLActivityTypeGoesToEvent:
     case activityType.KLActivityTypeEventCanceled:
     case activityType.KLActivityTypePayForEvent:
+    case activityType.KLActivityTypeFacebookFriendRegistered:
     default:
     return false;
   };
@@ -86,13 +88,14 @@ var updateObservers = function (activity, activityController) {
     case activityType.KLActivityTypeFollowMe:
     case activityType.KLActivityTypeGoesToMyEvent:
     case activityType.KLActivityTypePayForEvent:
+    case activityType.KLActivityTypeFacebookFriendRegistered:
       activity.addUnique("observers", activityController.to.id);
     break;
     case activityType.KLActivityTypeFollow:
       var observers = activityController.from.get("followers");
       if (observers) {
         var index = observers.indexOf(activityController.to.id);
-        if (index != -1) { 
+        if (index != -1) {
           observers.splice(index, 1);
         }
         activity.set("observers", observers);
@@ -106,7 +109,7 @@ var updateObservers = function (activity, activityController) {
       var ownerId = activityController.event.get('owner').id;
       if (observers) {
         var index = observers.indexOf(ownerId);
-        if (index != -1) { 
+        if (index != -1) {
           observers.splice(index, 1);
         }
         activity.set("observers", observers);
@@ -138,7 +141,7 @@ var buildGroupedActivityQuery = function (activityController) {
     query.equalTo("from", activityController.from);
   } else if (activityController.type == activityType.KLActivityTypeGoesToMyEvent) {
     query.equalTo("observers", activityController.to.id);
-    query.equalTo("event", activityController.event); 
+    query.equalTo("event", activityController.event);
   } else {
     //Return query null if it isn't grouped
     return null;
